@@ -28,8 +28,8 @@
   renderer.code = function ({ text, lang, escaped }) {
     const langStr = (lang || '').toLowerCase();
     if (langStr === 'mermaid' || langStr === 'mmd') {
-      const escapedText = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `<pre class="mermaid" data-mermaid="${escapeAttr(escapedText)}"></pre>`;
+      // 保留文本在 pre 内部；textContent 会自动解码 HTML 实体，Mermaid 按行解析原始语法
+      return `<pre class="mermaid">${escapeHtml(text)}</pre>`;
     }
     return origCode({ text, lang, escaped });
   };
@@ -89,22 +89,29 @@
   async function renderMermaid() {
     const nodes = Array.from(preview.querySelectorAll('pre.mermaid'));
     if (!nodes.length) return; // 无 mermaid 节点 → 不触碰 3.4MB 依赖
+    let runError = null;
     try {
       const mmd = await window.__lazyLoader.ensureMermaid(() => {
         mermaid.initialize({ startOnLoad: false, theme: state.theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' });
       });
       await mmd.run({ nodes });
     } catch (e) {
-      // mermaid.run 对个别失败节点兜底：此处在每节点渲染后再检查
+      runError = e;
+      console.error('Mermaid run error:', e);
     }
-    // 兜底检查：渲染失败的节点显示源码+错误
+    // 兜底检查：渲染失败的节点显示源码 + 具体错误信息
     nodes.forEach((node) => {
       if (!node.querySelector('svg')) {
-        const raw = node.dataset.mermaid || '';
+        const raw = node.dataset.mermaid || node.textContent || '';
+        // 尝试提取 mermaid 自带的错误文本
+        const builtInErr = node.querySelector('.error-text, .mermaid-error-text, [class*="error"]');
+        let detail = '';
+        if (builtInErr) detail = builtInErr.textContent;
+        else if (runError) detail = runError.message || '语法错误';
         const errBox = document.createElement('div');
         errBox.className = 'mermaid-error';
         errBox.innerHTML =
-          `<div class="err-msg">Mermaid 渲染失败，已显示源码</div>` +
+          `<div class="err-msg">Mermaid 渲染失败${detail ? '：' + escapeHtml(detail) : ''}</div>` +
           `<pre>${escapeHtml(raw)}</pre>`;
         node.replaceWith(errBox);
       }

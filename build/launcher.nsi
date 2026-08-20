@@ -37,6 +37,9 @@ Section
   SetSilent silent
   StrCpy $INSTDIR "$LOCALAPPDATA\${APP_NAME}\app-${VERSION}"
 
+  ; 保存启动器原始工作目录，避免后续 SetOutPath 改变后相对路径参数失效
+  System::Call 'kernel32::GetCurrentDirectory(i ${NSIS_MAX_STRLEN}, t .r2)'
+
   ; ---- 缓存有效性校验：版本匹配 + 完整性（三项全过才直启，任一失败 → 重建）----
   IfFileExists "$INSTDIR\${APP_EXEC}" 0 rebuild
   IfFileExists "$INSTDIR\resources\app.asar" 0 rebuild
@@ -63,6 +66,8 @@ Section
   FileClose $0
 
   launch:
+  ; 恢复原始工作目录后再启动子进程，使命令行相对路径/右键"打开方式"能正确解析文件
+  SetOutPath $R2
   ; 透传命令行参数并等待退出（保持与官方 portable 一致的退出码语义）
   ${GetParameters} $R0
   ExecWait '"$INSTDIR\${APP_EXEC}" $R0' $0
