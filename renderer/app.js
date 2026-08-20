@@ -10,7 +10,9 @@
     dirty: false,
     recent: [],
     theme: 'light',
-    version: ''
+    version: '',
+    showPreview: true,
+    syncScroll: true
   };
 
   const $ = (id) => document.getElementById(id);
@@ -492,6 +494,9 @@
         { label: '全选', acc: 'Ctrl+A', action: () => editor.select() }
       ],
       '视图': [
+        { label: '显示预览窗口', checked: () => state.showPreview, action: () => togglePreview() },
+        { label: '同步滚动', checked: () => state.syncScroll, action: () => toggleSyncScroll() },
+        { type: 'sep' },
         { label: '重新加载', acc: 'Ctrl+R', action: () => location.reload() },
         { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => { if (window.mdAPI) mdAPI.toggleDevTools(); } },
         { type: 'sep' },
@@ -557,6 +562,12 @@
         const row = document.createElement('div');
         row.className = 'mi';
         if (it.danger) row.classList.add('mi-danger');
+        if (typeof it.checked === 'function') {
+          const check = document.createElement('span');
+          check.className = 'check';
+          check.textContent = it.checked() ? '✓' : '';
+          row.appendChild(check);
+        }
         const span = document.createElement('span');
         span.textContent = it.label;
         row.appendChild(span);
@@ -622,6 +633,32 @@
     updateLineNumbers();
     scheduleRender();
     updateCursorInfo();
+  }
+
+  // ============ 视图开关：预览显隐 + 双向滚动同步 ============
+  let scrollSyncLock = false;
+
+  // 按滚动比例同步两个容器（编辑区与预览区内容高度不同，比例对齐）
+  function syncScrollByRatio(from, to) {
+    const fMax = from.scrollHeight - from.clientHeight;
+    const tMax = to.scrollHeight - to.clientHeight;
+    if (fMax <= 0 || tMax <= 0) return;
+    to.scrollTop = (from.scrollTop / fMax) * tMax;
+  }
+
+  function applyViewPrefs() {
+    $('workspace').classList.toggle('no-preview', !state.showPreview);
+  }
+
+  function togglePreview() {
+    state.showPreview = !state.showPreview;
+    applyViewPrefs();
+    try { localStorage.setItem('md-show-preview', state.showPreview ? '1' : '0'); } catch (e) {}
+  }
+
+  function toggleSyncScroll() {
+    state.syncScroll = !state.syncScroll;
+    try { localStorage.setItem('md-sync-scroll', state.syncScroll ? '1' : '0'); } catch (e) {}
   }
 
   // ============ 编码选择器（状态栏） ============
@@ -778,6 +815,18 @@
   });
   editor.addEventListener('scroll', () => {
     lineNums.scrollTop = editor.scrollTop;
+    if (state.syncScroll && !scrollSyncLock) {
+      scrollSyncLock = true;
+      syncScrollByRatio(editor, preview);
+      requestAnimationFrame(() => { scrollSyncLock = false; });
+    }
+  });
+  preview.addEventListener('scroll', () => {
+    if (state.syncScroll && !scrollSyncLock) {
+      scrollSyncLock = true;
+      syncScrollByRatio(preview, editor);
+      requestAnimationFrame(() => { scrollSyncLock = false; });
+    }
   });
   editor.addEventListener('keyup', updateCursorInfo);
   editor.addEventListener('click', updateCursorInfo);
@@ -800,6 +849,13 @@
       document.documentElement.dataset.theme = 'dark';
       state.theme = 'dark';
     }
+
+    // 视图偏好恢复（预览显隐 / 滚动同步，默认均开启）
+    try {
+      if (localStorage.getItem('md-show-preview') === '0') state.showPreview = false;
+      if (localStorage.getItem('md-sync-scroll') === '0') state.syncScroll = false;
+    } catch (e) {}
+    applyViewPrefs();
 
     buildMenubar();
     initDivider();

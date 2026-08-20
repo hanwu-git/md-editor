@@ -129,6 +129,7 @@ button { cursor: pointer; }
 .menu-popup .mi-danger { color: #c0392b; }
 .menu-popup .mi-danger:hover { background: #fdf0ee; color: #c0392b; }
 .menu-popup .mi-title { padding: 6px 16px 2px; font-size: 11px; color: var(--t3); }
+.menu-popup .mi .check { width: 16px; flex: none; color: var(--accent); }
 
 /* ============ 工作区 ============ */
 #workspace { flex: 1; display: flex; min-height: 0; }
@@ -137,6 +138,8 @@ button { cursor: pointer; }
 }
 #left-pane { flex: 1 1 50%; border-right: 0.5px solid var(--line); }
 #right-pane { flex: 1 1 50%; }
+/* 视图菜单关闭预览时：隐藏右栏与分隔条，左栏自动占满 */
+#workspace.no-preview #right-pane, #workspace.no-preview #divider { display: none; }
 
 .pane-header {
   height: 34px;
