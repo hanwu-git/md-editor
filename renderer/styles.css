@@ -322,6 +322,9 @@ button { cursor: pointer; }
   font-size: 11px;
   flex: none;
 }
+#status-encoding.clickable { cursor: pointer; padding: 1px 6px; border-radius: 4px; }
+#status-encoding.clickable:hover { background: var(--accent-soft); color: var(--accent); }
+.menu-popup-up { min-width: 150px; }
 #status-dirty.dirty { color: #f5c542; }
 
 /* ============ 确认浮层 ============ */
@@ -434,4 +437,10 @@ button { cursor: pointer; }
   cursor: pointer;
 }
 #searchbar button:hover { border-color: var(--accent); color: var(--accent); }
+#search-case { font-weight: 600; }
+#search-case.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .search-spacer { flex: 1; }

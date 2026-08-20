@@ -10,8 +10,7 @@
     dirty: false,
     recent: [],
     theme: 'light',
-    version: '',
-    pendingExit: false
+    version: ''
   };
 
   const $ = (id) => document.getElementById(id);
@@ -249,6 +248,12 @@
   }
 
   function initSearchbar() {
+    $('search-case').addEventListener('click', () => {
+      search.caseSensitive = !search.caseSensitive;
+      $('search-case').classList.toggle('active', search.caseSensitive);
+      updateMatches();
+      $('search-input').focus();
+    });
     $('search-input').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -363,7 +368,8 @@
     const res = await mdAPI.saveFile({
       path: state.filePath,
       content: editor.value,
-      encoding: state.encoding
+      encoding: state.encoding,
+      bom: state.bom
     });
     if (!res || res.canceled) return;
     if (res.error) { alert('保存失败：' + res.error); return; }
@@ -377,8 +383,8 @@
   }
 
   async function saveFileAs() {
-    // 另存为使用系统对话框，编码固定为 UTF-8（对话框内由主进程处理）
-    const res = await mdAPI.saveFileAs({ content: editor.value, encoding: state.encoding });
+    // 另存为按当前状态栏所选编码（含 BOM）写出，可用于转码保存
+    const res = await mdAPI.saveFileAs({ content: editor.value, encoding: state.encoding, bom: state.bom });
     if (!res || res.canceled) return;
     if (res.error) { alert('另存为失败：' + res.error); return; }
     if (res.saved && res.path) {
@@ -404,7 +410,6 @@
   // ============ 未保存确认 ============
   function handleExitConfirmation(action) {
     if (!state.dirty) {
-      state.pendingExit = true;
       mdAPI.quitApproved();
       return;
     }
@@ -412,14 +417,12 @@
       if (r === 'save') {
         saveFile().then(() => {
           if (!state.dirty) {
-            state.pendingExit = true;
             mdAPI.quitApproved();
           } else {
             mdAPI.quitCanceled();
           }
         });
       } else if (r === 'nosave') {
-        state.pendingExit = true;
         mdAPI.quitApproved();
       } else {
         mdAPI.quitCanceled();
@@ -485,17 +488,19 @@
         { type: 'sep' },
         { label: '剪切', acc: 'Ctrl+X', action: () => document.execCommand('cut') },
         { label: '复制', acc: 'Ctrl+C', action: () => document.execCommand('copy') },
-        { label: '粘贴', acc: 'Ctrl+V', action: () => document.execCommand('paste') },
+        { label: '粘贴', acc: 'Ctrl+V', action: pasteFromClipboard },
         { label: '全选', acc: 'Ctrl+A', action: () => editor.select() }
       ],
       '视图': [
         { label: '重新加载', acc: 'Ctrl+R', action: () => location.reload() },
-        { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => {} },
-        { label: '实际大小', acc: 'Ctrl+0', action: () => {} },
-        { label: '放大', acc: 'Ctrl++', action: () => {} },
-        { label: '缩小', acc: 'Ctrl+-', action: () => {} },
+        { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => { if (window.mdAPI) mdAPI.toggleDevTools(); } },
         { type: 'sep' },
-        { label: '全屏', acc: 'F11', action: () => {} }
+        { title: '缩放' },
+        { label: '实际大小', acc: 'Ctrl+0', action: () => { if (window.mdAPI) mdAPI.resetZoom(); } },
+        { label: '放大', acc: 'Ctrl++', action: () => { if (window.mdAPI) mdAPI.zoomIn(); } },
+        { label: '缩小', acc: 'Ctrl+-', action: () => { if (window.mdAPI) mdAPI.zoomOut(); } },
+        { type: 'sep' },
+        { label: '全屏', acc: 'F11', action: () => { if (window.mdAPI) mdAPI.toggleFullscreen(); } }
       ],
       '主题': [
         { label: '浅色', action: () => applyTheme('light') },
@@ -540,6 +545,13 @@
           const sep = document.createElement('div');
           sep.className = 'sep';
           popup.appendChild(sep);
+          return;
+        }
+        if (it.title) {
+          const t = document.createElement('div');
+          t.className = 'mi-title';
+          t.textContent = it.title;
+          popup.appendChild(t);
           return;
         }
         const row = document.createElement('div');
@@ -599,6 +611,74 @@
     alert(`${'MD编辑器'} v${state.version}\n\n本地 Markdown 编辑器\n· 分屏实时预览\n· Mermaid 流程图\n· 代码语法高亮\n· 多编码支持 (UTF-8 / GBK / UTF-16)\n· 完全离线运行`);
   }
 
+  // ============ 粘贴（经主进程 clipboard 中转） ============
+  async function pasteFromClipboard() {
+    if (!window.mdAPI) { document.execCommand('paste'); return; }
+    const text = await mdAPI.readClipboard();
+    if (!text) return;
+    editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
+    editor.focus();
+    markDirty(true);
+    updateLineNumbers();
+    scheduleRender();
+    updateCursorInfo();
+  }
+
+  // ============ 编码选择器（状态栏） ============
+  const ENCODINGS = [
+    { label: 'UTF-8', encoding: 'UTF-8', bom: false },
+    { label: 'UTF-8 (BOM)', encoding: 'UTF-8', bom: true },
+    { label: 'GBK', encoding: 'GBK', bom: false },
+    { label: 'UTF-16LE', encoding: 'UTF-16LE', bom: false },
+    { label: 'UTF-16BE', encoding: 'UTF-16BE', bom: false }
+  ];
+
+  function showEncodingMenu(anchor) {
+    document.querySelectorAll('.menu-popup').forEach((p) => p.remove()); // 复用菜单关闭逻辑，避免叠加
+    const popup = document.createElement('div');
+    popup.className = 'menu-popup menu-popup-up';
+    ENCODINGS.forEach((enc) => {
+      const row = document.createElement('div');
+      row.className = 'mi';
+      const cur = state.encoding === enc.encoding && state.bom === enc.bom;
+      const span = document.createElement('span');
+      span.textContent = (cur ? '✓ ' : '') + enc.label;
+      row.appendChild(span);
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        popup.remove();
+        state.encoding = enc.encoding;
+        state.bom = enc.bom;
+        updateTitleBar();
+      });
+      popup.appendChild(row);
+    });
+    const rect = anchor.getBoundingClientRect();
+    popup.style.left = rect.left + 'px';
+    popup.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    document.body.appendChild(popup);
+    // 点击菜单外任意处关闭
+    setTimeout(() => {
+      const closer = (ev) => {
+        if (!popup.contains(ev.target)) {
+          popup.remove();
+          document.removeEventListener('click', closer);
+        }
+      };
+      document.addEventListener('click', closer);
+    }, 0);
+  }
+
+  function initEncodingPicker() {
+    const enc = $('status-encoding');
+    enc.title = '点击更改编码（保存 / 另存为时按此编码写出，可用于转码）';
+    enc.classList.add('clickable');
+    enc.addEventListener('click', (e) => {
+      e.stopPropagation();
+      showEncodingMenu(enc);
+    });
+  }
+
   // ============ 快捷键 ============
   document.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -638,6 +718,14 @@
     mdAPI.getVersion().then((v) => {
       state.version = v;
       updateTitleBar();
+    });
+
+    // 最近文件：启动时从主进程拉取持久化列表，此后由主进程推送保持同步
+    mdAPI.getRecent().then((files) => {
+      if (Array.isArray(files)) state.recent = files;
+    });
+    mdAPI.onRecentUpdated((files) => {
+      if (Array.isArray(files)) state.recent = files;
     });
   }
 
@@ -716,6 +804,7 @@
     buildMenubar();
     initDivider();
     initSearchbar();
+    initEncodingPicker();
 
     // 初始示例内容（不含 mermaid，避免首启触发 3.4MB 懒加载）
     const sample = `# 欢迎使用 MD编辑器

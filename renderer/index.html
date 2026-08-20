@@ -6,10 +6,6 @@
         content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;">
   <title>MD编辑器</title>
   <link rel="stylesheet" href="styles.css">
-  <!-- 依赖本地优先：先尝试加载本地 node_modules，失败时自动降级 CDN（首次联网仅此一次） -->
-  <script>
-    window.__fallbackLoading = false;
-  </script>
 </head>
 <body>
   <!-- 标题栏（应用内自绘，替代系统标题栏以实现主题统一） -->
@@ -66,6 +62,7 @@
   <div id="searchbar" class="hidden">
     <div id="search-row">
       <input id="search-input" type="text" placeholder="查找…" />
+      <button id="search-case" title="区分大小写">Aa</button>
       <span id="search-count"></span>
       <button id="search-prev" title="上一个 (Shift+Enter)">↑</button>
       <button id="search-next" title="下一个 (Enter)">↓</button>
@@ -103,9 +100,6 @@
   </div>
 
   <!-- 依赖加载：marked 本地同步（44KB）；mermaid/highlight 由 lazy-loader 按需注入（本地 vendor 优先，CDN 兜底） -->
-  <script>
-    window.__fallbackLoading = false;
-  </script>
   <script src="lazy-loader.js"></script>
   <script src="vendor/marked.umd.js"></script>
   <script src="app.js"></script>

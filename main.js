@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const iconv = require('iconv-lite');
@@ -15,14 +15,34 @@ app.disableHardwareAcceleration();
 
 let mainWindow = null;
 
-// 最近打开文件（存内存，本次会话内有效）
+// 最近打开文件（持久化到 userData/recent-files.json，跨会话保留）
 let recentFiles = [];
+
+function recentFileStore() {
+  return path.join(app.getPath('userData'), 'recent-files.json');
+}
+function loadRecentFiles() {
+  try {
+    const arr = JSON.parse(fs.readFileSync(recentFileStore(), 'utf8'));
+    if (Array.isArray(arr)) return arr.filter((x) => typeof x === 'string').slice(0, 8);
+  } catch (e) { /* 文件不存在或损坏 → 忽略 */ }
+  return [];
+}
+function addRecentFile(filePath) {
+  if (!filePath) return;
+  recentFiles = [filePath, ...recentFiles.filter((f) => f !== filePath)].slice(0, 8);
+  try { fs.writeFileSync(recentFileStore(), JSON.stringify(recentFiles)); } catch (e) { /* 持久化失败不影响会话内功能 */ }
+  buildMenu();
+  if (mainWindow) mainWindow.webContents.send('recent:updated', recentFiles);
+}
 
 // ---------- 窗口创建 ----------
 function createWindow() {
+  const ws = loadWindowState();
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: ws.width,
+    height: ws.height,
+    ...(Number.isFinite(ws.x) && Number.isFinite(ws.y) ? { x: ws.x, y: ws.y } : {}),
     minWidth: 900,
     minHeight: 600,
     title: `${APP_NAME} v${APP_VERSION}`,
@@ -47,10 +67,12 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (ws.maximized) mainWindow.maximize();
   });
 
   // 关闭拦截：若有未保存修改，先征求渲染进程确认
   mainWindow.on('close', (e) => {
+    saveWindowState(); // 记忆窗口尺寸/位置（被拦截时也存，无副作用）
     if (mainWindow && mainWindow.__dirty && !mainWindow.__closingApproved) {
       e.preventDefault();
       mainWindow.webContents.send('menu:check-unsaved', { action: 'quit' });
@@ -252,25 +274,27 @@ ipcMain.handle('dialog:openFile', async () => {
   if (res.canceled || !res.filePaths.length) return { canceled: true };
   const filePath = res.filePaths[0];
   const { content, encoding, bom } = readFileWithEncoding(filePath);
-  if (!recentFiles.includes(filePath)) recentFiles.unshift(filePath);
-  recentFiles = recentFiles.slice(0, 8);
-  buildMenu();
+  addRecentFile(filePath);
   return { canceled: false, path: filePath, content, encoding, bom, fileName: path.basename(filePath) };
 });
 
 ipcMain.handle('dialog:openRecent', async (_e, filePath) => {
   try {
     const { content, encoding, bom } = readFileWithEncoding(filePath);
+    addRecentFile(filePath);
     return { canceled: false, path: filePath, content, encoding, bom, fileName: path.basename(filePath) };
   } catch (err) {
     return { canceled: false, error: `无法打开文件：${err.message}`, path: filePath };
   }
 });
 
+ipcMain.handle('app:getRecent', () => recentFiles);
+
 ipcMain.handle('dialog:saveFile', async (_e, payload) => {
-  const { path: filePath, content, encoding } = payload;
+  const { path: filePath, content, encoding, bom } = payload;
   try {
-    if (!filePath) {
+    let target = filePath;
+    if (!target) {
       const res = await dialog.showSaveDialog(mainWindow, {
         title: '保存文件',
         defaultPath: '未命名.md',
@@ -281,17 +305,18 @@ ipcMain.handle('dialog:saveFile', async (_e, payload) => {
         ]
       });
       if (res.canceled || !res.filePath) return { canceled: true };
-      return { canceled: false, path: res.filePath, saved: true };
+      target = res.filePath;
     }
-    writeFileWithEncoding(filePath, content, encoding);
-    return { canceled: false, path: filePath, saved: true };
+    writeFileWithEncoding(target, content, encoding, bom); // 无路径时也必须实际写入（修复首次保存不落盘）
+    addRecentFile(target);
+    return { canceled: false, path: target, saved: true };
   } catch (err) {
     return { canceled: false, saved: false, error: err.message };
   }
 });
 
 ipcMain.handle('dialog:saveFileAs', async (_e, payload) => {
-  const { content, encoding } = payload;
+  const { content, encoding, bom } = payload;
   const res = await dialog.showSaveDialog(mainWindow, {
     title: '另存为',
     defaultPath: '未命名.md',
@@ -303,7 +328,8 @@ ipcMain.handle('dialog:saveFileAs', async (_e, payload) => {
   });
   if (res.canceled || !res.filePath) return { canceled: true };
   try {
-    writeFileWithEncoding(res.filePath, content, encoding);
+    writeFileWithEncoding(res.filePath, content, encoding, bom);
+    addRecentFile(res.filePath);
     return { canceled: false, path: res.filePath, saved: true };
   } catch (err) {
     return { canceled: false, saved: false, error: err.message };
@@ -329,6 +355,22 @@ ipcMain.handle('dialog:confirmExit', async (_e, fileName) => {
   return res.response; // 2=保存 1=不保存 0=取消
 });
 
+// ---------- 视图控制（HTML 菜单栏使用；原生菜单快捷键由 role 自带） ----------
+ipcMain.handle('view:toggleDevTools', () => { if (mainWindow) mainWindow.webContents.toggleDevTools(); });
+ipcMain.handle('view:zoomIn', () => {
+  if (mainWindow) mainWindow.webContents.setZoomLevel(Math.min(mainWindow.webContents.getZoomLevel() + 0.5, 8));
+});
+ipcMain.handle('view:zoomOut', () => {
+  if (mainWindow) mainWindow.webContents.setZoomLevel(Math.max(mainWindow.webContents.getZoomLevel() - 0.5, -8));
+});
+ipcMain.handle('view:resetZoom', () => { if (mainWindow) mainWindow.webContents.setZoomLevel(0); });
+ipcMain.handle('view:toggleFullscreen', () => {
+  if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
+
+// ---------- 剪贴板（渲染进程 execCommand('paste') 被安全策略拦截，经主进程中转） ----------
+ipcMain.handle('edit:readClipboard', () => clipboard.readText());
+
 // ---------- 窗口控制 ----------
 ipcMain.on('win:minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('win:maximize', () => {
@@ -350,8 +392,29 @@ ipcMain.on('quit:canceled', () => {
   if (mainWindow) mainWindow.__closingApproved = false;
 });
 
+// ---------- 窗口尺寸/位置记忆 ----------
+function windowStateStore() {
+  return path.join(app.getPath('userData'), 'window-state.json');
+}
+function loadWindowState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(windowStateStore(), 'utf8'));
+    if (s && Number.isFinite(s.width) && Number.isFinite(s.height)) return s;
+  } catch (e) { /* 无记录 → 默认尺寸 */ }
+  return { width: 1280, height: 800, maximized: false };
+}
+function saveWindowState() {
+  if (!mainWindow) return;
+  try {
+    const bounds = mainWindow.getNormalBounds(); // 最大化时取还原尺寸
+    const s = { ...bounds, maximized: mainWindow.isMaximized() };
+    fs.writeFileSync(windowStateStore(), JSON.stringify(s));
+  } catch (e) { /* 持久化失败不影响退出 */ }
+}
+
 // ---------- 主流程 ----------
 app.whenReady().then(() => {
+  recentFiles = loadRecentFiles();
   createWindow();
   buildMenu();
 
@@ -362,11 +425,4 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-// 关闭前若主窗口存在，由渲染进程处理未保存确认
-app.on('before-quit', () => {
-  if (mainWindow) {
-    // 通知渲染进程可以清理
-  }
 });

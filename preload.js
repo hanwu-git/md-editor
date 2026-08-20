@@ -10,6 +10,17 @@ contextBridge.exposeInMainWorld('mdAPI', {
   saveFileAs: (payload) => ipcRenderer.invoke('dialog:saveFileAs', payload),
   confirmExit: (fileName) => ipcRenderer.invoke('dialog:confirmExit', fileName),
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  getRecent: () => ipcRenderer.invoke('app:getRecent'),
+
+  // 视图控制
+  toggleDevTools: () => ipcRenderer.invoke('view:toggleDevTools'),
+  zoomIn: () => ipcRenderer.invoke('view:zoomIn'),
+  zoomOut: () => ipcRenderer.invoke('view:zoomOut'),
+  resetZoom: () => ipcRenderer.invoke('view:resetZoom'),
+  toggleFullscreen: () => ipcRenderer.invoke('view:toggleFullscreen'),
+
+  // 剪贴板
+  readClipboard: () => ipcRenderer.invoke('edit:readClipboard'),
 
   // 窗口标题
   setTitle: (title) => ipcRenderer.invoke('window:setTitle', title),
@@ -32,6 +43,11 @@ contextBridge.exposeInMainWorld('mdAPI', {
     ipcRenderer.on('menu:saveAs', () => callback('saveAs'));
     ipcRenderer.on('menu:openRecent', (_e, filePath) => callback('openRecent', filePath));
     ipcRenderer.on('menu:check-unsaved', (_e, payload) => callback('checkUnsaved', payload));
+  },
+
+  // 最近文件变化监听（主进程持久化后推送）
+  onRecentUpdated: (callback) => {
+    ipcRenderer.on('recent:updated', (_e, files) => callback(files));
   },
 
   // 主题命令监听
