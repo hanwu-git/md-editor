@@ -1,0 +1,39 @@
+{
+  "name": "md-editor",
+  "productName": "MD编辑器",
+  "version": "1.0.0",
+  "description": "本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题",
+  "main": "main.js",
+  "author": "hanwu",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "node dev.js",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.6.3"
+  },
+  "devDependencies": {
+    "electron": "^43.4.1",
+    "electron-builder": "^26.0.12",
+    "marked": "^18.0.10",
+    "mermaid": "^11.16.1",
+    "highlight.js": "^11.12.0"
+  },
+  "build": {
+    "productName": "MD编辑器",
+    "electronDist": ".electron-dist",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "node_modules/iconv-lite/**/*",
+      "node_modules/safer-buffer/**/*"
+    ],
+    "win": {
+      "target": ["portable"],
+      "icon": "build/icon.ico"
+    }
+  }
+}

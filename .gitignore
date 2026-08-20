@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.electron-dist/
+.npmcache/
+cache/
+.extracted-app/
+.workbuddy/
+*.log
