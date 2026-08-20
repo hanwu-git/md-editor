@@ -50,6 +50,11 @@ contextBridge.exposeInMainWorld('mdAPI', {
     ipcRenderer.on('recent:updated', (_e, files) => callback(files));
   },
 
+  // 外部传入文件路径监听（右键"打开方式" / 命令行启动时打开指定文件）
+  onOpenFile: (callback) => {
+    ipcRenderer.on('app:openFile', (_e, filePath) => callback(filePath));
+  },
+
   // 主题命令监听
   onThemeCommand: (callback) => {
     ipcRenderer.on('theme:set', (_e, theme) => callback(theme));

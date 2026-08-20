@@ -11,6 +11,49 @@ const APP_VERSION = app.getVersion();
 // no-sandbox 兼容受限环境；GPU 不再禁用（无 GPU 时 Chromium 自动回退软件渲染）
 app.commandLine.appendSwitch('no-sandbox');
 
+// Windows：单实例锁。当用户用"打开方式"打开 .md 文件时，若应用已在运行，
+// 新实例将把文件路径传给原实例后退出，避免打开多个窗口。
+let pendingOpenFilePath = null;
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+  return;
+}
+
+app.on('second-instance', (_event, argv) => {
+  const filePath = extractFilePathFromArgv(argv);
+  if (filePath && mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send('app:openFile', filePath);
+  }
+});
+
+// 解析命令行参数中的待打开文件路径
+// Electron 启动参数结构：[, <exe>] 后可能跟目标文件路径；portable 启动器 ExecWait 透传用户参数
+function extractFilePathFromArgv(argv) {
+  if (!Array.isArray(argv)) return null;
+  // 跳过可执行文件自身（或第一个位置）
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    if (!arg || arg.startsWith('--') || arg.startsWith('-')) continue;
+    // 开发模式常见干扰项：'.'（当前目录）或 Electron 内部目录参数
+    if (arg === '.' || arg === './' || arg === '\\.') continue;
+    const ext = path.extname(arg).toLowerCase();
+    // 优先识别常见文本/Markdown 扩展名
+    if (['.md', '.markdown', '.mdown', '.txt'].includes(ext)) {
+      return path.resolve(arg);
+    }
+    // 兜底：存在且是普通文件（排除目录）
+    try {
+      const p = path.resolve(arg);
+      const st = fs.statSync(p);
+      if (st.isFile()) return p;
+    } catch (e) { /* 不存在/无法访问 → 忽略 */ }
+  }
+  return null;
+}
+
 let mainWindow = null;
 
 // 最近打开文件（持久化到 userData/recent-files.json，跨会话保留）
@@ -413,8 +456,20 @@ function saveWindowState() {
 // ---------- 主流程 ----------
 app.whenReady().then(() => {
   recentFiles = loadRecentFiles();
+
+  // 启动时可能携带文件路径（右键→打开方式 / 命令行传参）
+  pendingOpenFilePath = extractFilePathFromArgv(process.argv);
+
   createWindow();
   buildMenu();
+
+  // 窗口 ready 后，若启动参数包含文件路径则通知渲染进程打开
+  if (pendingOpenFilePath) {
+    mainWindow.webContents.once('dom-ready', () => {
+      mainWindow.webContents.send('app:openFile', pendingOpenFilePath);
+      pendingOpenFilePath = null;
+    });
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

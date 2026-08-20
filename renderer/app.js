@@ -764,6 +764,11 @@
     mdAPI.onRecentUpdated((files) => {
       if (Array.isArray(files)) state.recent = files;
     });
+
+    // 外部传入文件路径（右键"打开方式"/命令行启动时打开指定文件）
+    mdAPI.onOpenFile((filePath) => {
+      openRecent(filePath);
+    });
   }
 
   // ============ 分隔条拖拽 ============
