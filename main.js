@@ -8,10 +8,8 @@ const iconv = require('iconv-lite');
 const APP_NAME = 'MD编辑器';
 const APP_VERSION = app.getVersion();
 
-// 无 GPU / 受限环境下稳定运行（软件渲染亦可）
-app.commandLine.appendSwitch('disable-gpu');
+// no-sandbox 兼容受限环境；GPU 不再禁用（无 GPU 时 Chromium 自动回退软件渲染）
 app.commandLine.appendSwitch('no-sandbox');
-app.disableHardwareAcceleration();
 
 let mainWindow = null;
 
