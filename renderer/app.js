@@ -3,11 +3,15 @@
 (function () {
   // ============ 状态 ============
   const state = {
+    // 当前激活文档的镜像（绝大多数既有逻辑仍读写这些字段，改造成本最小）
     filePath: null,
     fileName: '未命名',
     encoding: 'UTF-8',
     bom: false,
     dirty: false,
+    // 多标签：tabs 保存所有打开文档；活跃 tab 内容始终镜像到上面字段 + editor.value
+    tabs: [],
+    activeTabId: null,
     recent: [],
     theme: 'light',
     version: '',
@@ -326,89 +330,241 @@
     $('status-encoding').textContent = `${state.encoding}${state.bom ? ' (BOM)' : ''}`;
   }
 
-  // ============ 文件操作 ============
-  function setContent(content) {
-    editor.value = content;
-    markDirty(true);
+  // ============ 多标签（Tab）============
+  let TAB_SEQ = 0;
+
+  function makeTab(initial) {
+    const tab = {
+      id: ++TAB_SEQ,
+      filePath: null,
+      fileName: '未命名',
+      encoding: 'UTF-8',
+      bom: false,
+      dirty: false,
+      content: ''
+    };
+    if (initial) Object.assign(tab, initial);
+    state.tabs.push(tab);
+    return tab;
+  }
+
+  function curTab() {
+    return state.tabs.find((t) => t.id === state.activeTabId) || state.tabs[0] || null;
+  }
+
+  // 把当前激活 tab 在界面的编辑状态（编辑器内容 + 状态镜像）写回其 tab 快照
+  function snapshotCurToTab() {
+    const t = curTab();
+    if (!t) return;
+    t.filePath = state.filePath;
+    t.fileName = state.fileName;
+    t.encoding = state.encoding;
+    t.bom = state.bom;
+    t.dirty = state.dirty;
+    t.content = editor.value;
+  }
+
+  // 界面载入某 tab：把其快照恢复到 state 镜像与编辑器（不触发用户编辑流）
+  function loadTab(t) {
+    if (!t) return;
+    state.filePath = t.filePath;
+    state.fileName = t.fileName;
+    state.encoding = t.encoding;
+    state.bom = t.bom;
+    state.dirty = t.dirty;
+    editor.value = t.content;
     updateLineNumbers();
     renderAll();
     updateCursorInfo();
-  }
-
-  async function newFile() {
-    if (!(await confirmDiscardIfDirty())) return;
-    state.filePath = null;
-    state.fileName = '未命名';
-    state.encoding = 'UTF-8';
-    state.bom = false;
-    setContent('');
+    // 直接恢复 dirty 标志 & 上报，不经过 markDirty(避免重复 updateTitleBar）
+    if (window.mdAPI) mdAPI.setDirty(t.dirty);
     updateTitleBar();
+    renderTabs();
   }
 
-  async function openFile() {
-    if (!(await confirmDiscardIfDirty())) return;
-    const res = await mdAPI.openFile();
-    if (!res || res.canceled) return;
-    if (res.error) { alert(res.error); return; }
-    state.filePath = res.path;
-    state.fileName = res.fileName;
-    state.encoding = res.encoding;
-    state.bom = res.bom;
-    setContent(res.content);
-    addRecent(res.path);
-    updateTitleBar();
+  // 激活某个 tab；切换前先把当前编辑状态存回原 tab
+  function switchTab(id) {
+    const t = state.tabs.find((x) => x.id === id);
+    if (!t || t.id === state.activeTabId) return;
+    snapshotCurToTab();
+    state.activeTabId = t.id;
+    loadTab(t);
   }
 
-  async function openRecent(filePath) {
-    if (!(await confirmDiscardIfDirty())) return;
-    const res = await mdAPI.openRecent(filePath);
-    if (!res || res.canceled) return;
-    if (res.error) { alert(res.error); return; }
-    state.filePath = res.path;
-    state.fileName = res.fileName;
-    state.encoding = res.encoding;
-    state.bom = res.bom;
-    setContent(res.content);
-    addRecent(res.path);
-    updateTitleBar();
-  }
-
-  async function saveFile() {
-    const res = await mdAPI.saveFile({
-      path: state.filePath,
-      content: editor.value,
-      encoding: state.encoding,
-      bom: state.bom
+  // 渲染标签栏 DOM
+  function renderTabs() {
+    const bar = $('tabbar');
+    bar.innerHTML = '';
+    if (state.tabs.length <= 1) { // 单 tab 时不显示标签栏，保持简洁
+      bar.classList.add('hidden');
+      return;
+    }
+    bar.classList.remove('hidden');
+    state.tabs.forEach((t) => {
+      const el = document.createElement('div');
+      el.className = 'tab' + (t.id === state.activeTabId ? ' active' : '');
+      el.title = t.filePath || t.fileName;
+      const name = document.createElement('span');
+      name.className = 'tab-name';
+      name.textContent = t.fileName;
+      el.appendChild(name);
+      if (t.dirty) {
+        const dot = document.createElement('span');
+        dot.className = 'tab-dot';
+        el.appendChild(dot);
+      } else {
+        const close = document.createElement('span');
+        close.className = 'tab-close';
+        close.textContent = '×';
+        close.title = '关闭';
+        close.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeTab(t.id);
+        });
+        el.appendChild(close);
+      }
+      // 点击中部切换
+      const label = document.createElement('span');
+      label.style.flex = '1';
+      el.addEventListener('click', (e) => {
+        if (e.target === close) return;
+        switchTab(t.id);
+      });
+      // 中键关闭
+      el.addEventListener('auxclick', (e) => {
+        if (e.button === 1) { e.preventDefault(); closeTab(t.id); }
+      });
+      bar.appendChild(el);
     });
-    if (!res || res.canceled) return;
-    if (res.error) { alert('保存失败：' + res.error); return; }
-    if (res.saved) {
-      state.filePath = res.path;
-      state.fileName = res.path ? res.path.split(/[\\/]/).pop() : state.fileName;
-      if (res.path) addRecent(res.path);
-      markDirty(false);
-      updateTitleBar();
+  }
+
+  // 关闭标签；关闭前若有未保存修改需确认
+  function closeTab(id) {
+    const idx = state.tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const t = state.tabs[idx];
+    const closeNow = () => {
+      if (t.id === state.activeTabId) {
+        // 删除前快照（保证关闭激活 tab 不丢最新编辑）
+        snapshotCurToTab();
+        state.tabs.splice(idx, 1);
+        // 激活相邻 tab
+        const next = state.tabs[Math.min(idx, state.tabs.length - 1)] || null;
+        if (next) { state.activeTabId = next.id; loadTab(next); }
+        else closeWindow();          // 最后一个 tab 关闭 → 关闭窗口
+      } else {
+        state.tabs.splice(idx, 1);
+        renderTabs();
+      }
+    };
+    // 仅关闭激活的 dirty tab 时确认；非激活 tab 的 dirty 内容保存在其快照，关闭仍提示
+    if (t.dirty) {
+      confirmSaveFor(t).then((r) => {
+        if (r === 'save') {
+          saveTabContent(t).then((ok) => { if (ok) { t.dirty = false; closeNow(); } });
+        } else if (r === 'nosave') { closeNow(); }
+        // cancel → 不关闭
+      });
+    } else {
+      closeNow();
     }
   }
 
+  // 添加或复用 tab：同一路径已打开则切过去；否则新建并激活
+  function addOrActivateTab(path, fileName, content, encoding, bom) {
+    const norm = path ? path.replace(/\\/g, '/') : null;
+    const exist = norm ? state.tabs.find((t) => t.filePath && t.filePath.replace(/\\/g, '/') === norm) : null;
+    if (exist) {
+      switchTab(exist.id);
+      return exist;
+    }
+    snapshotCurToTab();   // 新 tab 前保存当前编辑状态
+    const t = makeTab({ filePath: path || null, fileName: fileName || (path ? path.split(/[\\/]/).pop() : '未命名'), encoding, bom, content });
+    state.activeTabId = t.id;
+    loadTab(t);
+    return t;
+  }
+
+  // ============ 文件操作 ============
+  // 新建：新开一个"未命名"tab（不再覆盖原文档，原 tab 保留）
+  async function newFile() {
+    addOrActivateTab(null, '未命名', '', 'UTF-8', false);
+  }
+
+  async function openFile() {
+    const res = await mdAPI.openFile();
+    if (!res || res.canceled) return;
+    if (res.error) { alert(res.error); return; }
+    addOrActivateTab(res.path, res.fileName, res.content, res.encoding, res.bom);
+    addRecent(res.path);
+  }
+
+  async function openRecent(filePath) {
+    const res = await mdAPI.openRecent(filePath);
+    if (!res || res.canceled) return;
+    if (res.error) { alert(res.error); return; }
+    addOrActivateTab(res.path, res.fileName, res.content, res.encoding, res.bom);
+    addRecent(res.path);
+  }
+
+  // 保存指定 tab；默认保存当前激活 tab。返回是否已成功保存（false=取消/失败）
+  function saveTabContent(tab) {
+    const t = tab || curTab();
+    if (!t) return Promise.resolve(false);
+    return mdAPI.saveFile({ path: t.filePath, content: t.content, encoding: t.encoding, bom: t.bom }).then((res) => {
+      if (!res || res.canceled) return false;
+      if (res.error) { alert('保存失败：' + res.error); return false; }
+      if (res.saved && res.path) {
+        t.filePath = res.path;
+        t.fileName = res.path.split(/[\\/]/).pop();
+        t.dirty = false;
+        addRecent(res.path);
+        // 若是对当前激活 tab 保存，同步界面镜像
+        if (t.id === state.activeTabId) {
+          state.filePath = t.filePath;
+          state.fileName = t.fileName;
+          state.dirty = false;
+          if (window.mdAPI) mdAPI.setDirty(false);
+          updateTitleBar();
+        }
+        renderTabs();
+      }
+      return true;
+    });
+  }
+
+  function saveFile() { saveTabContent(curTab()); }
+
   async function saveFileAs() {
+    const t = curTab();
+    if (!t) return;
     // 另存为按当前状态栏所选编码（含 BOM）写出，可用于转码保存
-    const res = await mdAPI.saveFileAs({ content: editor.value, encoding: state.encoding, bom: state.bom });
+    const res = await mdAPI.saveFileAs({ content: t.content, encoding: t.encoding, bom: t.bom });
     if (!res || res.canceled) return;
     if (res.error) { alert('另存为失败：' + res.error); return; }
     if (res.saved && res.path) {
-      state.filePath = res.path;
-      state.fileName = res.path.split(/[\\/]/).pop();
+      t.filePath = res.path;
+      t.fileName = res.path.split(/[\\/]/).pop();
+      t.dirty = false;
       addRecent(res.path);
-      markDirty(false);
-      updateTitleBar();
+      if (t.id === state.activeTabId) {
+        state.filePath = t.filePath;
+        state.fileName = t.fileName;
+        state.dirty = false;
+        if (window.mdAPI) mdAPI.setDirty(false);
+        updateTitleBar();
+      }
+      renderTabs();
     }
   }
 
   function markDirty(d) {
     state.dirty = d;
+    const t = curTab();
+    if (t) { t.dirty = d; t.content = editor.value; }
     if (window.mdAPI) mdAPI.setDirty(d);
     updateTitleBar();
+    renderTabs();
   }
 
   function addRecent(p) {
@@ -417,40 +573,38 @@
   }
 
   // ============ 未保存确认 ============
-  function handleExitConfirmation(action) {
-    if (!state.dirty) {
-      mdAPI.quitApproved();
-      return;
-    }
-    showConfirm().then((r) => {
+  function closeWindow() {
+    if (window.mdAPI) mdAPI.closeWindow();
+    else window.close();
+  }
+
+  // 关闭/退出时：批量确认所有有未保存修改的 tab，全部处理完才放行退出
+  async function handleExitConfirmation() {
+    snapshotCurToTab();   // 先保存当前激活 tab 的最新编辑
+    for (const t of state.tabs) {
+      if (!t.dirty) continue;
+      const r = await showConfirm(t.fileName);
       if (r === 'save') {
-        saveFile().then(() => {
-          if (!state.dirty) {
-            mdAPI.quitApproved();
-          } else {
-            mdAPI.quitCanceled();
-          }
-        });
+        const ok = await saveTabContent(t);
+        if (!ok) { mdAPI.quitCanceled(); return; }   // 取消或保存失败 → 中断退出
       } else if (r === 'nosave') {
-        mdAPI.quitApproved();
+        // 继续下一个
       } else {
         mdAPI.quitCanceled();
+        return;
       }
-    });
+    }
+    mdAPI.quitApproved();
   }
 
-  function confirmDiscardIfDirty() {
-    if (!state.dirty) return Promise.resolve(true);
-    return showConfirm().then((r) => {
-      if (r === 'save') return saveFile().then(() => !state.dirty);
-      if (r === 'nosave') return true;
-      return false; // cancel
-    });
+  // 针对某个 tab 的保存确认（标题显示该文件）
+  function confirmSaveFor(t) {
+    return showConfirm(t.fileName);
   }
 
-  function showConfirm() {
+  function showConfirm(fileName) {
     return new Promise((resolve) => {
-      $('confirm-title').textContent = `是否保存对 ${state.fileName} 的更改？`;
+      $('confirm-title').textContent = `是否保存对 ${fileName || state.fileName} 的更改？`;
       $('save-confirm-overlay').classList.remove('hidden');
       const handler = (e) => {
         const btn = e.target.dataset.confirm;
@@ -693,6 +847,8 @@
         popup.remove();
         state.encoding = enc.encoding;
         state.bom = enc.bom;
+        const t = curTab();
+        if (t) { t.encoding = enc.encoding; t.bom = enc.bom; }
         updateTitleBar();
       });
       popup.appendChild(row);
@@ -843,12 +999,12 @@
   editor.addEventListener('keyup', updateCursorInfo);
   editor.addEventListener('click', updateCursorInfo);
 
-  // Ctrl+W 关闭窗口
+  // Ctrl+W：多标签时关闭当前标签；仅一个标签时关闭窗口
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
       e.preventDefault();
-      if (window.mdAPI) mdAPI.closeWindow();
-      else window.close();
+      if (state.tabs.length > 1 && state.activeTabId != null) closeTab(state.activeTabId);
+      else closeWindow();
     }
   });
 
@@ -895,11 +1051,16 @@ app.render();
 
 > 提示：按 Ctrl+S 保存文件，Ctrl+Shift+S 另存为。全程离线运行。
 `;
+    // 首个文档作为初始 tab（欢迎示例）
+    const t0 = makeTab();
+    t0.content = sample;
+    state.activeTabId = t0.id;
     editor.value = sample;
     updateLineNumbers();
     renderAll();
     updateCursorInfo();
     updateTitleBar();
+    renderTabs();
   }
 
   if (document.readyState === 'loading') {

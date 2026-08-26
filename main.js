@@ -111,10 +111,11 @@ function createWindow() {
     if (ws.maximized) mainWindow.maximize();
   });
 
-  // 关闭拦截：若有未保存修改，先征求渲染进程确认
+  // 关闭拦截：多标签下各 tab 的未保存状态由渲染进程统一管理，
+  // 因此无论主进程是否记录 dirty 都先征求渲染进程批量确认（无脏 tab 时立即放行）。
   mainWindow.on('close', (e) => {
     saveWindowState(); // 记忆窗口尺寸/位置（被拦截时也存，无副作用）
-    if (mainWindow && mainWindow.__dirty && !mainWindow.__closingApproved) {
+    if (mainWindow && !mainWindow.__closingApproved) {
       e.preventDefault();
       mainWindow.webContents.send('menu:check-unsaved', { action: 'quit' });
     }
