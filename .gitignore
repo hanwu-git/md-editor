@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .electron-dist/
+.electron-dist-ia32/
+.electron-dist-x64/
 .npmcache/
 cache/
 .extracted-app/
 .workbuddy/
 *.log
+w-*.js
+w-out.txt

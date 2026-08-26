@@ -18,7 +18,15 @@ WindowIcon off
 ; NSIS File 指令不支持正斜杠，SRCDIR_B 为反斜杠版本（Icon/OutFile 正反均可）
 !searchreplace SRCDIR_B "${SRCDIR}" "/" "\"
 Icon "${SRCDIR}/build/icon.ico"
-OutFile "${SRCDIR}/dist/MD编辑器.exe"
+; ARCH_SUFFIX 由 build-all.js 注入（x64/32）；决定输出文件名与缓存目录名，32/64 缓存互不冲突
+!ifndef ARCH_SUFFIX
+  !define ARCH_SUFFIX "x64"
+!endif
+; 被打包的 electron-builder 输出目录（x64→win-unpacked，ia32→win-ia32-unpacked）
+!ifndef UNPACKED_NAME
+  !define UNPACKED_NAME "win-unpacked"
+!endif
+OutFile "${SRCDIR}/dist/MD编辑器-${ARCH_SUFFIX}.exe"
 SetCompressor /FINAL lzma
 
 !define APP_NAME "MD编辑器"
@@ -27,7 +35,7 @@ SetCompressor /FINAL lzma
   !define VERSION "0.0.0"
 !endif
 ; 版本标记文件：解压完成后最后创建，存在 = 缓存完整且与当前版本匹配
-!define CACHE_MARKER ".cache-ok-${VERSION}"
+!define CACHE_MARKER ".cache-ok-${VERSION}-${ARCH_SUFFIX}"
 
 !include "FileFunc.nsh"
 
@@ -35,7 +43,7 @@ Name "${APP_NAME} ${VERSION}"
 
 Section
   SetSilent silent
-  StrCpy $INSTDIR "$LOCALAPPDATA\${APP_NAME}\app-${VERSION}"
+  StrCpy $INSTDIR "$LOCALAPPDATA\${APP_NAME}\app-${VERSION}-${ARCH_SUFFIX}"
 
   ; 保存启动器原始工作目录，避免后续 SetOutPath 改变后相对路径参数失效
   System::Call 'kernel32::GetCurrentDirectory(i ${NSIS_MAX_STRLEN}, t .r2)'
@@ -59,7 +67,7 @@ Section
 
   ; 解压完整程序（一次性成本）
   SetOutPath $INSTDIR
-  File /r "${SRCDIR_B}\dist\win-unpacked\*.*"
+  File /r "${SRCDIR_B}\dist\${UNPACKED_NAME}\*.*"
 
   ; 最后创建版本标记（解压被中断则无标记 → 下次启动自动重建）
   FileOpen $0 "$INSTDIR\${CACHE_MARKER}" w
