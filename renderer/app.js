@@ -1046,32 +1046,10 @@
     initSearchbar();
     initEncodingPicker();
 
-    // 初始示例内容（不含 mermaid，避免首启触发 3.4MB 懒加载）
-    const sample = `# 欢迎使用 MD编辑器
-
-这是一个**本地 Markdown 编辑器**，支持：
-
-- Markdown 实时渲染
-- Mermaid 流程图（输入 \`\`\`mermaid 代码块后自动加载渲染）
-- 代码语法高亮
-- 明暗主题切换
-- 多编码支持（UTF-8 / GBK）
-- 查找替换（Ctrl+F / Ctrl+H）
-
-## 代码高亮示例
-
-\`\`\`js
-const app = new Editor();
-app.render();
-\`\`\`
-
-> 提示：按 Ctrl+S 保存文件，Ctrl+Shift+S 另存为。全程离线运行。
-`;
-    // 首个文档作为初始 tab（欢迎示例）
+    // 首个文档作为初始 tab：直接空白「未命名」，不再展示欢迎示例
     const t0 = makeTab();
-    t0.content = sample;
     state.activeTabId = t0.id;
-    editor.value = sample;
+    editor.value = '';
     updateLineNumbers();
     renderAll();
     updateCursorInfo();
