@@ -241,6 +241,11 @@ button { cursor: pointer; }
   user-select: text;
   caret-color: var(--accent);
 }
+/* 自动折行：开启时软换行（含长单词/CJK 长串强制断行） */
+#editor.wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 #editor::placeholder { color: var(--t3); }
 
 /* 分隔条 */

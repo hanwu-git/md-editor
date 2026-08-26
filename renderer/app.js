@@ -16,7 +16,8 @@
     theme: 'light',
     version: '',
     showPreview: true,
-    syncScroll: true
+    syncScroll: true,
+    wrap: true
   };
 
   const $ = (id) => document.getElementById(id);
@@ -657,6 +658,7 @@
       '视图': [
         { label: '显示预览窗口', checked: () => state.showPreview, action: () => togglePreview() },
         { label: '同步滚动', checked: () => state.syncScroll, action: () => toggleSyncScroll() },
+        { label: '自动折行', checked: () => state.wrap, action: () => toggleWrap() },
         { type: 'sep' },
         { label: '重新加载', acc: 'Ctrl+R', action: () => location.reload() },
         { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => { if (window.mdAPI) mdAPI.toggleDevTools(); } },
@@ -809,6 +811,13 @@
 
   function applyViewPrefs() {
     $('workspace').classList.toggle('no-preview', !state.showPreview);
+    applyWrap();
+  }
+
+  // 自动折行：开 → wrap=soft + pre-wrap 软换行；关 → wrap=off + pre 横向滚动
+  function applyWrap() {
+    editor.wrap = state.wrap ? 'soft' : 'off';
+    editor.classList.toggle('wrap', state.wrap);
   }
 
   function togglePreview() {
@@ -820,6 +829,12 @@
   function toggleSyncScroll() {
     state.syncScroll = !state.syncScroll;
     try { localStorage.setItem('md-sync-scroll', state.syncScroll ? '1' : '0'); } catch (e) {}
+  }
+
+  function toggleWrap() {
+    state.wrap = !state.wrap;
+    applyWrap();
+    try { localStorage.setItem('md-wrap', state.wrap ? '1' : '0'); } catch (e) {}
   }
 
   // ============ 编码选择器（状态栏） ============
@@ -1022,6 +1037,7 @@
     try {
       if (localStorage.getItem('md-show-preview') === '0') state.showPreview = false;
       if (localStorage.getItem('md-sync-scroll') === '0') state.syncScroll = false;
+      if (localStorage.getItem('md-wrap') === '0') state.wrap = false;
     } catch (e) {}
     applyViewPrefs();
 
