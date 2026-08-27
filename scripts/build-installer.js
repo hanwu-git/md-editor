@@ -1,7 +1,7 @@
-// 构建自缓存单文件启动器（指定架构）：makensis 编译 launcher.nsi → dist\MD编辑器-<64|32>.exe
-// 用法：node scripts/build-launcher.js <x64|ia32>   （缺省 x64）
-// 缓存目录按架构隔离：%LOCALAPPDATA%\MD编辑器\app-<版本>-<64|32>
-// 前置：electron-builder --win dir 已生成当前架构的 dist\win-unpacked
+// 构建安装版单文件安装包（指定架构）：makensis 编译 installer.nsi → dist\MD编辑器Setup-<64|32>.exe
+// 用法：node scripts/build-installer.js <x64|ia32>   （缺省 x64）
+// 前置：electron-builder --win dir 已生成当前架构的 dist\win-<unpacked>
+// 区别于 build-launcher.js（绿色版）：本脚本产出真正的安装向导（目录/关联/快捷方式/卸载）。
 'use strict';
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -36,12 +36,36 @@ if (!fs.existsSync(path.join(unpacked, 'MD编辑器.exe'))) {
   process.exit(1);
 }
 
-const out = path.join(root, DIST_DIR, `MD编辑器-${suffix}.exe`);
+// 默认安装目录：64→Program Files（$PROGRAMFILES64，规避 32 位 NSIS stub 的 WOW64 重定向到 x86），32→Program Files (x86)
+const installDir = arch === 'x64'
+  ? '$PROGRAMFILES64\\MD编辑器'
+  : '$PROGRAMFILES32\\MD编辑器';
+
+const out = path.join(root, DIST_DIR, `MD编辑器Setup-${suffix}.exe`);
 console.log(`makensis: ${makensis}`);
 console.log(`架构: ${arch} (后缀 ${suffix}), 版本: ${version}, 源: ${DIST_DIR}\\${unpackedName}`);
 const srcdir = root.replace(/\\/g, '/');
-const r = spawnSync(makensis, ['-INPUTCHARSET', 'UTF8', `-DVERSION=${version}`, `-DARCH_SUFFIX=${suffix}`, `-DUNPACKED_NAME=${unpackedName}`, `-DDIST_DIR=${DIST_DIR}`, `-DSRCDIR=${srcdir}`, path.join('build', 'launcher.nsi')], { cwd: root, stdio: 'inherit' });
+// 插件目录：项目自带 nsProcess.dll（用于卸载时结束运行中的程序）
+// makensis 在 <nsisRoot>/Plugins/x86-unicode 查找插件；makensis 位于 <nsisRoot>/Bin/
+const nsisRoot = path.dirname(path.dirname(makensis));
+const nsisPluginsDir = path.join(nsisRoot, 'Plugins', 'x86-unicode');
+const plugin = path.join(root, 'build', 'plugins', 'nsProcess.dll');
+if (fs.existsSync(plugin) && fs.existsSync(nsisPluginsDir)) {
+  fs.copyFileSync(plugin, path.join(nsisPluginsDir, 'nsProcess.dll'));
+}
+const extraDefines = ['-DIS_64'];
+const r = spawnSync(makensis, [
+  '-INPUTCHARSET', 'UTF8',
+  `-DVERSION=${version}`,
+  `-DARCH_SUFFIX=${suffix}`,
+  `-DUNPACKED_NAME=${unpackedName}`,
+  `-DDIST_DIR=${DIST_DIR}`,
+  `-DINSTALL_DIR=${installDir}`,
+  `-DSRCDIR=${srcdir}`,
+  ...(arch === 'x64' ? extraDefines : []),
+  path.join('build', 'installer.nsi')
+], { cwd: root, stdio: 'inherit' });
 if (r.status !== 0) { console.error('makensis 编译失败'); process.exit(r.status || 1); }
 
 const size = (fs.statSync(out).size / 1024 / 1024).toFixed(1);
-console.log(`完成: ${DIST_DIR}\\MD编辑器-${suffix}.exe (${size} MB)`);
+console.log(`完成: ${DIST_DIR}\\MD编辑器Setup-${suffix}.exe (${size} MB)`);

@@ -505,3 +505,7 @@ button { cursor: pointer; }
   color: var(--accent);
 }
 .search-spacer { flex: 1; }
+/* ============ 双向跳转高亮 ============ */
+@keyframes mmd-flash { 0% { outline: 2px solid #f4b942; outline-offset: 2px; background: rgba(244,185,66,0.15); } 100% { outline: 2px solid transparent; background: transparent; } }
+#preview .flash, #editor:focus + #preview .flash { animation: mmd-flash 1.1s ease; }
+

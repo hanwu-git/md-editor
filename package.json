@@ -1,7 +1,7 @@
 {
   "name": "md-editor",
   "productName": "MD编辑器",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题",
   "main": "main.js",
   "author": "hanwu",
@@ -10,7 +10,8 @@
     "start": "electron .",
     "dev": "node dev.js",
     "dist": "node scripts/build-all.js",
-    "dist:launcher": "node scripts/build-launcher.js"
+    "dist:launcher": "node scripts/build-launcher.js",
+    "dist:installer": "node scripts/build-installer.js"
   },
   "dependencies": {
     "iconv-lite": "^0.6.3"

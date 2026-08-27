@@ -47,6 +47,82 @@
   // ============ 渲染管线 ============
   let renderTimer = null;
 
+  // ---- 双向精确跳转：预览块元素 ↔ 源码字符偏移 ----
+  let srcLineStarts = [];   // 源码每行起始偏移
+  let editorLineH = 24;      // 编辑区行高（px），由显示高度推算
+  let jumpTimer = null;
+  // 参与映射的块级 token 类型（会各自在预览里产生一个顶层元素）
+  const SRC_BLOCK_TYPES = ['heading', 'paragraph', 'blockquote', 'hr', 'code', 'list', 'table'];
+
+  function buildLineStarts(s) {
+    const arr = [0];
+    for (let i = 0; i < s.length; i++) if (s[i] === '\n') arr.push(i + 1);
+    return arr;
+  }
+
+  // 渲染后把「预览顶层元素 ↔ 其在源码中的起始偏移」写进 data-src-pos。
+  // 顺序一一对应才标注；数量不匹配则放弃（避免错位），保持安全降级。
+  function annotatePreview(src) {
+    const topEls = Array.from(preview.children);
+    const tokens = marked.lexer(src).filter((t) => SRC_BLOCK_TYPES.includes(t.type));
+    if (topEls.length !== tokens.length) return;
+    let cursor = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      let pos = src.indexOf(tokens[i].raw, cursor);
+      if (pos < 0) pos = cursor;
+      cursor = pos + tokens[i].raw.length;
+      if (topEls[i]) topEls[i].dataset.srcPos = String(pos);
+    }
+  }
+
+  // 由偏移转 0 起行号
+  function lineOf(pos) {
+    let l = 0;
+    for (let i = 0; i < srcLineStarts.length; i++) { if (srcLineStarts[i] > pos) break; l = i; }
+    return l;
+  }
+
+  function flashEl(el) {
+    if (!el) return;
+    el.classList.remove('flash');
+    void el.offsetWidth; // 重排以重触发动画
+    el.classList.add('flash');
+    setTimeout(() => el && el.classList.remove('flash'), 1200);
+  }
+
+  // 右侧双击/点击一块 → 左侧选中并滚动到对应源码行
+  function jumpPreviewToSource(el) {
+    const pos = Number(el.dataset.srcPos);
+    if (!(pos >= 0)) return;
+    flashEl(el);
+    const line = lineOf(pos);
+    const start = srcLineStarts[line];
+    const next = line + 1 < srcLineStarts.length ? srcLineStarts[line + 1] : editor.value.length;
+    const end = Math.max(start, next - (next > start ? 1 : 0)); // 去掉行尾换行
+    editor.focus();
+    editor.setSelectionRange(start, end);
+    const lineH = editorLineH || 24;
+    editor.scrollTop = line * lineH;
+    lineNums.scrollTop = editor.scrollTop;
+    updateCursorInfo();
+  }
+
+  // 左侧光标位置 → 右侧滚动到最近的预览块并高亮
+  function jumpEditorToPreview() {
+    if (!state.showPreview) return;
+    const pos = editor.selectionStart;
+    let best = null;
+    for (const e of preview.querySelectorAll('[data-src-pos]')) {
+      if (Number(e.dataset.srcPos) <= pos) best = e; else break;
+    }
+    if (best) { flashEl(best); best.scrollIntoView({ block: 'nearest', behavior: 'auto' }); }
+  }
+
+  function scheduleJumpEditor() {
+    clearTimeout(jumpTimer);
+    jumpTimer = setTimeout(jumpEditorToPreview, 220);
+  }
+
   function scheduleRender() {
     clearTimeout(renderTimer);
     renderTimer = setTimeout(renderAll, 250);
@@ -56,6 +132,7 @@
   function renderAll() {
     const t0 = performance.now();
     const src = editor.value;
+    srcLineStarts = buildLineStarts(src);
     let html;
     try {
       html = marked.parse(src);
@@ -63,6 +140,7 @@
       html = `<p style="color:#c0392b">渲染失败：${escapeHtml(e.message)}</p>`;
     }
     preview.innerHTML = html;
+    annotatePreview(src); // 记录「预览块元素 ↔ 源码字符偏移」映射，供双向精确跳转
 
     // 代码高亮（非 mermaid）
     highlightCodeBlocks();
@@ -798,7 +876,7 @@
   }
 
   function showAbout() {
-    alert(`${'MD编辑器'} v${state.version}\n\n本地 Markdown 编辑器\n· 分屏实时预览\n· Mermaid 流程图\n· 代码语法高亮\n· 多编码支持 (UTF-8 / GBK / UTF-16)\n· 完全离线运行`);
+    alert(`${'MD编辑器'} v${state.version}\n\n本地 Markdown 编辑器\n· 分屏实时预览，多标签页编辑\n· 双向跳转：预览双击 → 源码行 / 光标移动 → 预览高亮\n· Mermaid 流程图\n· 代码语法高亮\n· 多编码支持 (UTF-8 / GBK / UTF-16)\n· 查找替换、自动折行、同步滚动\n· 支持打开方式直接编辑 .md/.markdown/.txt\n· 明暗主题，完全离线运行`);
   }
 
   // ============ 粘贴（经主进程 clipboard 中转） ============
@@ -1030,6 +1108,17 @@
   editor.addEventListener('keyup', updateCursorInfo);
   editor.addEventListener('click', updateCursorInfo);
 
+  // ---- 双向精确跳转事件 ----
+  // 左侧编辑区：按光标/选择位置驱动右侧滚动并高亮对应预览块
+  editor.addEventListener('click', scheduleJumpEditor);
+  editor.addEventListener('keyup', scheduleJumpEditor);
+  editor.addEventListener('input', scheduleJumpEditor);
+  // 右侧预览：双击某块 → 左侧选中并滚动到对应源码行
+  preview.addEventListener('dblclick', (e) => {
+    const el = e.target && e.target.closest ? e.target.closest('[data-src-pos]') : null;
+    if (el) jumpPreviewToSource(el);
+  });
+
   // Ctrl+W：多标签时关闭当前标签；仅一个标签时关闭窗口
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
@@ -1054,6 +1143,7 @@
       if (localStorage.getItem('md-show-preview') === '0') state.showPreview = false;
       if (localStorage.getItem('md-sync-scroll') === '0') state.syncScroll = false;
       if (localStorage.getItem('md-wrap') === '0') state.wrap = false;
+      editorLineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH;
     } catch (e) {}
     applyViewPrefs();
 

@@ -13,10 +13,24 @@ const root = path.resolve(__dirname, '..');
 const ebBin = path.join(root, 'node_modules', '.bin', 'electron-builder.cmd');
 if (!fs.existsSync(ebBin)) { console.error('未找到 electron-builder，请先 npm install'); process.exit(1); }
 
+// 输出主目录：默认 dist；可传 MD_DIST 环境变量指向隔离目录（如 _pack），规避因文件被占用（IDE/杀毒监视）无法覆盖旧包的问题
+const DIST_DIR = process.env.MD_DIST || 'dist';
+function safeRm(p) {
+  try { fs.rmSync(p, { recursive: true, force: true }); }
+  catch (e) { console.warn(`清理 ${p} 失败（可能被占用）: ${e.message}`); }
+}
+if (DIST_DIR !== 'dist') {
+  safeRm(path.join(root, DIST_DIR));
+} else {
+  safeRm(path.join(root, DIST_DIR, 'win-unpacked'));
+  safeRm(path.join(root, DIST_DIR, 'win-ia32-unpacked'));
+}
+
 const base = {
   productName: 'MD编辑器',
   files: ['main.js', 'preload.js', 'renderer/**/*', 'node_modules/iconv-lite/**/*', 'node_modules/safer-buffer/**/*'],
-  win: { target: ['dir'], icon: 'build/icon.ico' }
+  win: { target: ['dir'], icon: 'build/icon.ico' },
+  directories: { output: DIST_DIR }
 };
 const archs = [
   { name: 'x64',  suffix: '64', electronDist: '.electron-dist' },
@@ -37,6 +51,7 @@ for (const a of archs) {
     process.exit(1);
   }
   run(ebBin, ['--win', 'dir', `--${a.name}`, '--config', cfgPath], `electron-builder ${a.name}`, true);
-  run(process.execPath, [path.join('scripts', 'build-launcher.js'), a.name], `makensis ${a.name}`, false);
+  run(process.execPath, [path.join('scripts', 'build-launcher.js'), a.name], `绿色版 makensis ${a.name}`, false);
+  run(process.execPath, [path.join('scripts', 'build-installer.js'), a.name], `安装版 makensis ${a.name}`, false);
 }
-console.log('\n全部完成：dist\\MD编辑器-64.exe 与 dist\\MD编辑器-32.exe');
+console.log('\n全部完成：dist\\MD编辑器-64.exe、MD编辑器-32.exe（绿色版）与 MD编辑器Setup-64.exe、MD编辑器Setup-32.exe（安装版）');

@@ -26,7 +26,11 @@ Icon "${SRCDIR}/build/icon.ico"
 !ifndef UNPACKED_NAME
   !define UNPACKED_NAME "win-unpacked"
 !endif
-OutFile "${SRCDIR}/dist/MD编辑器-${ARCH_SUFFIX}.exe"
+; 输出主目录：默认 dist；隔离构建时由 build-launcher.js 经 -DDIST_DIR 注入
+!ifndef DIST_DIR
+  !define DIST_DIR "dist"
+!endif
+OutFile "${SRCDIR}/${DIST_DIR}/MD编辑器-${ARCH_SUFFIX}.exe"
 SetCompressor /FINAL lzma
 
 !define APP_NAME "MD编辑器"
@@ -67,7 +71,7 @@ Section
 
   ; 解压完整程序（一次性成本）
   SetOutPath $INSTDIR
-  File /r "${SRCDIR_B}\dist\${UNPACKED_NAME}\*.*"
+  File /r "${SRCDIR_B}\${DIST_DIR}\${UNPACKED_NAME}\*.*"
 
   ; 最后创建版本标记（解压被中断则无标记 → 下次启动自动重建）
   FileOpen $0 "$INSTDIR\${CACHE_MARKER}" w
