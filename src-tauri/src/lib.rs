@@ -202,7 +202,7 @@ fn about_dialog(window: Option<&WebviewWindow>) {
     if let Some(w) = window {
         let _ = w.dialog()
             .message(format!(
-                "{APP_NAME} v{}\n\n本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题。\n全程离线运行。",
+                "{APP_NAME} v{}\n\n本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题。\n全程离线运行。\n\n由 hhwxxx 进行开发",
                 env!("CARGO_PKG_VERSION")
             ))
             .title(format!("关于 {APP_NAME}"))
