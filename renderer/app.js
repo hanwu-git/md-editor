@@ -1034,7 +1034,7 @@
   }
 
   function showAbout() {
-    alert(`${'MD编辑器'} v${state.version}\n\n本地 Markdown 编辑器\n· 分屏实时预览，多标签页编辑\n· 双向跳转：预览双击 → 源码行 / 光标移动 → 预览高亮\n· Mermaid 流程图\n· 代码语法高亮\n· 多编码支持 (UTF-8 / GBK / UTF-16)\n· 查找替换、自动折行、同步滚动\n· 支持打开方式直接编辑 .md/.markdown/.txt\n· 明暗主题，完全离线运行`);
+    alert(`${'MD编辑器'} v${state.version}\n\n本地 Markdown 编辑器\n· 分屏实时预览，多标签页编辑\n· 双向跳转：预览双击 → 源码行 / 光标移动 → 预览高亮\n· Mermaid 流程图\n· 代码语法高亮\n· 多编码支持 (UTF-8 / GBK / UTF-16)\n· 查找替换、自动折行、同步滚动\n· 支持打开方式直接编辑 .md/.markdown/.txt\n· 明暗主题，完全离线运行\n\n由 hhwxxx 进行开发`);
   }
 
   // ============ 粘贴（经主进程 clipboard 中转） ============
