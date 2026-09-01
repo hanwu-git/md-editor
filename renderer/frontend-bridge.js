@@ -47,6 +47,9 @@
     clearDefaultMdAssoc: () => call('clear_default_md_assoc'),
     readImageBytes:   (path) => call('read_image_bytes', { path }),
 
+    // 外链通过系统默认浏览器打开（v6.0.1）：避免 WebView2 应用内导航
+    openExternal:     (url) => call('open_external', { url }),
+
     onMenuCommand:   (cb) => {
       if (!T || !T.event) return;
       const on = (evt, k) => T.event.listen(evt, () => cb(k));

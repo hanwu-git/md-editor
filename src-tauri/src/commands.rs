@@ -365,3 +365,19 @@ pub fn clear_default_md_assoc() -> Result<bool, String> {
 pub fn read_image_bytes(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
+
+// ---------- 外链系统浏览器打开（v6.0.1） ----------
+
+/// 通过系统默认浏览器打开外部 http(s) 链接，避免 WebView2 应用内导航。
+/// 仅允许 http/https 协议，其他协议一律拒绝。
+#[tauri::command]
+pub fn open_external(app: AppHandle, url: String) -> Result<(), String> {
+    let lower = url.to_lowercase();
+    if !lower.starts_with("http://") && !lower.starts_with("https://") {
+        return Err("仅支持 http/https 协议的外部链接".into());
+    }
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
+}

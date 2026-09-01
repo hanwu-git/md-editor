@@ -28,6 +28,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::dialog_open_file,
             commands::dialog_open_recent,
@@ -51,6 +52,7 @@ pub fn run() {
             commands::set_default_md_assoc,
             commands::clear_default_md_assoc,
             commands::read_image_bytes,
+            commands::open_external,
         ])
         .setup(move |app| {
             setup_window_menu(app.handle())?;

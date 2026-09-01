@@ -1277,6 +1277,17 @@
     if (el) jumpPreviewToSource(el);
   });
 
+  // 外链系统浏览器打开（v6.0.1）：拦截预览区 <a> 点击，http(s) 链接交后端调系统浏览器
+  preview.addEventListener('click', (e) => {
+    const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (/^https?:\/\//i.test(href)) {
+      e.preventDefault();
+      if (window.mdAPI && mdAPI.openExternal) mdAPI.openExternal(href).catch(() => {});
+    }
+  });
+
   // Ctrl+W：多标签时关闭当前标签；仅一个标签时关闭窗口
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
