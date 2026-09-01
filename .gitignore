@@ -5,24 +5,7 @@ target/
 # ---- Node 依赖 ----
 node_modules/
 
-# ---- 打包产物（可选：如保留则从本文件去掉下面两行再提交） ----
-dist/
-
 # ---- 系统文件 ----
 Thumbs.db
 .DS_Store
 *.log
-
-# ---- Electron 本地内核与构建缓存 ----
-.electron-dist/
-.electron-dist-ia32/
-.npmcache/
-cache/
-.workbuddy/
-
-# ---- Tauri 构建期生成 ----
-src-tauri/gen/
-
-# ---- 归档与临时脚本 ----
-/*.zip
-/w-*.js

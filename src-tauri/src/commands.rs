@@ -365,19 +365,3 @@ pub fn clear_default_md_assoc() -> Result<bool, String> {
 pub fn read_image_bytes(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
-
-// ---------- 外链：用系统默认浏览器打开 ----------
-
-/// 在系统默认浏览器中打开 http(s) 外链（对应原 Electron shell.openExternal）。
-/// 仅允许 http/https，防止前端传入任意协议被系统执行。
-#[tauri::command]
-pub fn open_external(app: AppHandle, url: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let u = url.trim();
-    if !(u.starts_with("http://") || u.starts_with("https://")) {
-        return Err("仅允许打开 http/https 链接".to_string());
-    }
-    app.opener()
-        .open_url(u, None::<&str>)
-        .map_err(|e| e.to_string())
-}

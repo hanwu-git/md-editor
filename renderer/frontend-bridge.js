@@ -47,9 +47,6 @@
     clearDefaultMdAssoc: () => call('clear_default_md_assoc'),
     readImageBytes:   (path) => call('read_image_bytes', { path }),
 
-    // 外链：交系统默认浏览器打开（对应原 Electron shell.openExternal）
-    openExternal:     (url) => call('open_external', { url }),
-
     onMenuCommand:   (cb) => {
       if (!T || !T.event) return;
       const on = (evt, k) => T.event.listen(evt, () => cb(k));

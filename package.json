@@ -1,7 +1,7 @@
 {
   "name": "md-editor-tauri",
   "productName": "MD编辑器",
-  "version": "6.0.1",
+  "version": "6.0.0",
   "description": "本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题（Tauri 重构版）",
   "author": "hanwu",
   "license": "MIT",

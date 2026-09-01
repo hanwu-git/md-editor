@@ -10,8 +10,7 @@ const APP_NAME: &str = "MD编辑器";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // 官方要求 single-instance 必须最先注册（插件按注册顺序执行，
-        // 第二实例应在其他插件初始化前退出并转发参数）
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // 二次启动：解析命令行传参文件路径 → 聚焦已有窗口并转发打开
             if let Some(file) = extract_file_path(&args) {
@@ -27,10 +26,8 @@ pub fn run() {
                 let _ = win.set_focus();
             }
         }))
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::dialog_open_file,
             commands::dialog_open_recent,
@@ -54,7 +51,6 @@ pub fn run() {
             commands::set_default_md_assoc,
             commands::clear_default_md_assoc,
             commands::read_image_bytes,
-            commands::open_external,
         ])
         .setup(move |app| {
             setup_window_menu(app.handle())?;

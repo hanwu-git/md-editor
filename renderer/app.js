@@ -1228,22 +1228,6 @@
     });
   }
 
-  // ============ 外链：http(s) 链接交系统默认浏览器打开 ============
-  // 否则 webview 会在应用窗口内同窗口导航，把编辑器页面整个替换掉。
-  function initExternalLinks() {
-    document.addEventListener('click', (e) => {
-      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-      if (!a) return;
-      const href = a.getAttribute('href') || '';
-      if (/^https?:\/\//i.test(href)) {
-        e.preventDefault();
-        if (window.mdAPI && window.mdAPI.openExternal) {
-          window.mdAPI.openExternal(href).catch(() => {});
-        }
-      }
-    });
-  }
-
   // ============ 标题栏按钮 ============
   $('min-btn').addEventListener('click', () => { if (window.mdAPI) mdAPI.minimize(); });
   $('max-btn').addEventListener('click', () => { if (window.mdAPI) mdAPI.maximize(); });
@@ -1325,7 +1309,6 @@
     initDivider();
     initSearchbar();
     initEncodingPicker();
-    initExternalLinks();
 
     maybeAskSetDefaultAssoc();
 
