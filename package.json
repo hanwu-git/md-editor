@@ -1,43 +1,16 @@
 {
-  "name": "md-editor",
+  "name": "md-editor-tauri",
   "productName": "MD编辑器",
-  "version": "4.0.0",
-  "description": "本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题",
-  "main": "main.js",
+  "version": "6.0.1",
+  "description": "本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题（Tauri 重构版）",
   "author": "hanwu",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
-    "dev": "node dev.js",
-    "dist": "node scripts/build-all.js",
-    "dist:launcher": "node scripts/build-launcher.js",
-    "dist:installer": "node scripts/build-installer.js"
-  },
-  "dependencies": {
-    "iconv-lite": "^0.6.3"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:nsis": "tauri build --bundles nsis"
   },
   "devDependencies": {
-    "electron": "^43.4.1",
-    "electron-builder": "^26.15.3",
-    "highlight.js": "^11.12.0",
-    "marked": "^18.0.10",
-    "mermaid": "^11.16.1"
-  },
-  "build": {
-    "productName": "MD编辑器",
-    "electronDist": ".electron-dist",
-    "files": [
-      "main.js",
-      "preload.js",
-      "renderer/**/*",
-      "node_modules/iconv-lite/**/*",
-      "node_modules/safer-buffer/**/*"
-    ],
-    "win": {
-      "target": [
-        "dir"
-      ],
-      "icon": "build/icon.ico"
-    }
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

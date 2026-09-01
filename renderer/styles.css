@@ -335,6 +335,13 @@ button { cursor: pointer; }
 #preview a { color: var(--accent); text-decoration: none; }
 #preview a:hover { text-decoration: underline; }
 #preview img { max-width: 100%; border-radius: 6px; }
+#preview .md-img { display: block; margin: 12px 0; text-align: center; }
+#preview .md-img img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(10, 20, 50, 0.12);
+}
 #preview hr { border: none; border-top: 0.5px solid var(--line); margin: 14px 0; }
 #preview .hljs { background: transparent; padding: 0; }
 
@@ -400,6 +407,19 @@ button { cursor: pointer; }
   user-select: none;
 }
 #save-confirm-overlay.hidden { display: none; }
+#assoc-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 510;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+#assoc-overlay.hidden { display: none; }
+#assoc-title { font-size: 13.5px; font-weight: 500; margin-bottom: 6px; }
+#assoc-detail { font-size: 12px; color: var(--t3); margin-bottom: 16px; }
 .confirm-box {
   width: 360px;
   background: var(--bg);

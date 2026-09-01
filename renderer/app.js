@@ -38,10 +38,82 @@
     }
     return origCode({ text, lang, escaped });
   };
+  // 自定义图片：把相对路径解析为绝对路径并标记，渲染后读取本地文件展示
+  renderer.image = function ({ href, title, text }) {
+    const alt = text ? ` alt="${escapeAttr(text.split(/\s+/)[0])}"` : '';
+    const ttl = title ? ` title="${escapeAttr(title)}"` : '';
+    return `<span class="md-img" data-mdimage="${escapeAttr(href)}"><img src="" loading="lazy"${alt}${ttl}></span>`;
+  };
   marked.setOptions({ renderer });
 
   function escapeAttr(s) {
     return s.replace(/"/g, '&quot;');
+  }
+
+  // ---- 本地图片渲染：相对/绝对路径 → 绝对路径 → 读取字节 → data URL ----
+
+  // 把 md 里引用的图片路径解析为绝对路径（相对路径基于当前文件所在目录）
+  function resolveImagePath(href) {
+    if (!href) return null;
+    let h = href.trim();
+    if (/^data:/i.test(h)) return h;              // data URL 直接返回
+    if (/^https?:\/\//i.test(h)) return h;         // 网络图片保持原样
+    if (/^[a-zA-Z]:[\\/]/.test(h) || h.startsWith('\\\\')) return h; // 已是绝对路径
+    const t = curTab();
+    const base = (t && t.filePath) ? t.filePath.replace(/[\\/][^\\/]*$/, '') : '';
+    if (!base) return h;
+    // 合并路径（处理 ./ 与 ../
+    const joined = base + '/' + h;
+    const parts = joined.split(/[\\/]/);
+    const out = [];
+    for (const p of parts) {
+      if (p === '.' || p === '') continue;
+      if (p === '..') { out.pop(); continue; }
+      out.push(p);
+    }
+    return out.join('\\');
+  }
+
+  const MIME_BY_EXT = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon'
+  };
+
+  function dataUrl(bytes, path) {
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    const mime = MIME_BY_EXT[ext] || 'image/png';
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return `data:${mime};base64,${btoa(bin)}`;
+  }
+
+  // 渲染后处理所有 [data-mdimage] 图片节点（去重加载）
+  function loadLocalImages() {
+    if (!window.mdAPI || !window.mdAPI.readImageBytes) return;
+    const nodes = Array.from(preview.querySelectorAll('[data-mdimage]'));
+    nodes.forEach((el) => {
+      if (el.dataset.loading || el.dataset.loaded) return;
+      const href = el.dataset.mdimage;
+      el.dataset.loading = '1';
+      const abs = resolveImagePath(href);
+      // 网络/data 图片无需后端读取
+      if (/^data:/i.test(abs) || /^https?:\/\//i.test(abs)) {
+        const img = el.querySelector('img');
+        if (img) img.src = abs;
+        el.dataset.loaded = '1';
+        return;
+      }
+      window.mdAPI.readImageBytes(abs).then((bytes) => {
+        const img = el.querySelector('img');
+        if (img && Array.isArray(bytes) && bytes.length) img.src = dataUrl(bytes, abs);
+        else if (img) img.alt = '(图片加载失败)';
+        el.dataset.loaded = '1';
+      }).catch(() => {
+        const img = el.querySelector('img');
+        if (img) img.alt = '(图片加载失败)';
+        el.dataset.loaded = '1';
+      });
+    });
   }
 
   // ============ 渲染管线 ============
@@ -142,6 +214,12 @@
     preview.innerHTML = html;
     annotatePreview(src); // 记录「预览块元素 ↔ 源码字符偏移」映射，供双向精确跳转
 
+    // 兼容性增强：将"看起来像 Mermaid 图"的缩进代码块提升为围栏式 mermaid 以参与渲染
+    promoteIndentedMermaid();
+
+    // 本地图片：读取相对/绝对路径的图片并展示
+    loadLocalImages();
+
     // 代码高亮（非 mermaid）
     highlightCodeBlocks();
 
@@ -150,6 +228,48 @@
       const ms = Math.round(performance.now() - t0);
       $('render-time').textContent = `渲染 ${ms}ms · 自动刷新`;
       $('status-render').textContent = `渲染 ${ms}ms`;
+    });
+  }
+
+  // Mermaid 图类型关键字（简称可识别）
+  const MERMAID_DIAGRAM_TYPES = [
+    'graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
+    'stateDiagram-v2', 'erDiagram', 'gantt', 'pie', 'journey', 'gitGraph',
+    'quadrantChart', 'mindmap', 'timeline', 'xychart', 'block-beta',
+    'architecture-beta', 'zenuml', 'sankey-beta', 'c4', 'kanban', 'packet-beta'
+  ];
+
+  // 判断一段文本是否像 Mermaid 图：忽略前导空白后首行命中图类型关键字，且整体含箭头/连接语法
+  function looksLikeMermaid(text) {
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return false;
+    const first = lines[0].toLowerCase();
+    const matchType = MERMAID_DIAGRAM_TYPES.some((t) => first === t || first.startsWith(t + ' '));
+    if (!matchType) return false;
+    // 至少含一条箭头/连接以便确认为图
+    const hasLink = lines.some((l) => l.includes('-->') || l.includes('---') || l.includes('-->|') || l.includes('==>'));
+    if (hasLink) return true;
+    // gantt 图没有箭头，改用其专有语法（section / after 依赖）确认
+    if (first === 'gantt') {
+      return lines.some((l) => l.startsWith('section')) || lines.some((l) => l.includes(' after '));
+    }
+    return false;
+  }
+
+  // 将预览里未带 mermaid 标注、但形态像缩进式 Mermaid 的 <pre><code> 提升为 <pre class="mermaid">
+  function promoteIndentedMermaid() {
+    const codes = Array.from(preview.querySelectorAll('pre code'));
+    codes.forEach((code) => {
+      const pre = code.closest('pre');
+      if (!pre || pre.classList.contains('mermaid')) return;
+      if (code.querySelector('br, .hljs') && !looksLikeMermaid(code.textContent)) return;
+      const text = code.textContent;
+      if (!looksLikeMermaid(text)) return;
+      const clean = text.replace(/\s+$/g, '');
+      const pre2 = document.createElement('pre');
+      pre2.className = 'mermaid';
+      pre2.textContent = clean;
+      pre.replaceWith(pre2);
     });
   }
 
@@ -387,6 +507,34 @@
       try { m.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' }); } catch (e) {}
     }
     renderAll();
+  }
+
+  // 首次启动：询问是否设为默认 MD 文件编辑器（用 localStorage 标记是否已询问过）
+  function maybeAskSetDefaultAssoc() {
+    if (!window.mdAPI || !window.mdAPI.setDefaultMdAssoc) return;
+    let asked = false;
+    try { asked = localStorage.getItem('md-assoc-asked') === '1'; } catch (e) {}
+    if (asked) return;
+    const overlay = $('assoc-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+
+    const done = (action) => {
+      overlay.classList.add('hidden');
+      try { localStorage.setItem('md-assoc-asked', '1'); } catch (e) {}
+      if (action === 'yes') {
+        window.mdAPI.setDefaultMdAssoc().catch(() => {
+          alert('设置默认编辑器失败，请稍后重试。');
+        });
+      }
+    };
+
+    overlay.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        done(b.dataset.assoc);
+      }, { once: true });
+    });
   }
 
   // ============ 标题 / 状态 ============
@@ -628,28 +776,38 @@
     });
   }
 
-  function saveFile() { saveTabContent(curTab()); }
+  async function saveFile() {
+    try {
+      await saveTabContent(curTab());
+    } catch (e) {
+      alert('保存失败：' + (e && e.message ? e.message : e));
+    }
+  }
 
   async function saveFileAs() {
     const t = curTab();
     if (!t) return;
     // 另存为按当前状态栏所选编码（含 BOM）写出，可用于转码保存
-    const res = await mdAPI.saveFileAs({ content: t.content, encoding: t.encoding, bom: t.bom });
-    if (!res || res.canceled) return;
-    if (res.error) { alert('另存为失败：' + res.error); return; }
-    if (res.saved && res.path) {
-      t.filePath = res.path;
-      t.fileName = res.path.split(/[\\/]/).pop();
-      t.dirty = false;
-      addRecent(res.path);
-      if (t.id === state.activeTabId) {
-        state.filePath = t.filePath;
-        state.fileName = t.fileName;
-        state.dirty = false;
-        if (window.mdAPI) mdAPI.setDirty(false);
-        updateTitleBar();
+    try {
+      const res = await mdAPI.saveFileAs({ content: t.content, encoding: t.encoding, bom: t.bom });
+      if (!res || res.canceled) return;
+      if (res.error) { alert('另存为失败：' + res.error); return; }
+      if (res.saved && res.path) {
+        t.filePath = res.path;
+        t.fileName = res.path.split(/[\\/]/).pop();
+        t.dirty = false;
+        addRecent(res.path);
+        if (t.id === state.activeTabId) {
+          state.filePath = t.filePath;
+          state.fileName = t.fileName;
+          state.dirty = false;
+          if (window.mdAPI) mdAPI.setDirty(false);
+          updateTitleBar();
+        }
+        renderTabs();
       }
-      renderTabs();
+    } catch (e) {
+      alert('另存为失败（命令异常）：' + (e && e.message ? e.message : e));
     }
   }
 
@@ -1070,6 +1228,22 @@
     });
   }
 
+  // ============ 外链：http(s) 链接交系统默认浏览器打开 ============
+  // 否则 webview 会在应用窗口内同窗口导航，把编辑器页面整个替换掉。
+  function initExternalLinks() {
+    document.addEventListener('click', (e) => {
+      const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (/^https?:\/\//i.test(href)) {
+        e.preventDefault();
+        if (window.mdAPI && window.mdAPI.openExternal) {
+          window.mdAPI.openExternal(href).catch(() => {});
+        }
+      }
+    });
+  }
+
   // ============ 标题栏按钮 ============
   $('min-btn').addEventListener('click', () => { if (window.mdAPI) mdAPI.minimize(); });
   $('max-btn').addEventListener('click', () => { if (window.mdAPI) mdAPI.maximize(); });
@@ -1151,6 +1325,9 @@
     initDivider();
     initSearchbar();
     initEncodingPicker();
+    initExternalLinks();
+
+    maybeAskSetDefaultAssoc();
 
     // 初始示例内容（不含 mermaid，避免首启触发 3.4MB 懒加载）
     const sample = `# 欢迎使用 MD编辑器

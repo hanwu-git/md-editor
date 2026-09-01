@@ -28,6 +28,7 @@ if (DIST_DIR !== 'dist') {
 
 const base = {
   productName: 'MD编辑器',
+  electronLanguages: ['zh-CN', 'en-US'],
   files: ['main.js', 'preload.js', 'renderer/**/*', 'node_modules/iconv-lite/**/*', 'node_modules/safer-buffer/**/*'],
   win: { target: ['dir'], icon: 'build/icon.ico' },
   directories: { output: DIST_DIR }

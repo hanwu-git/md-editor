@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;">
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:;">
   <title>MD编辑器</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -102,7 +102,21 @@
     </div>
   </div>
 
+  <!-- 首次启动：是否设为默认 MD 编辑器询问浮层 -->
+  <div id="assoc-overlay" class="hidden">
+    <div class="confirm-box">
+      <div class="confirm-icon">MD</div>
+      <p id="assoc-title">将 MD编辑器 设为默认吗？</p>
+      <p id="assoc-detail">设为默认后，.md / .markdown / .mdown / .txt 文件将默认使用 MD编辑器 打开。</p>
+      <div class="confirm-buttons">
+        <button data-assoc="no">暂不设置</button>
+        <button data-assoc="yes" class="primary">设为默认</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 依赖加载：marked 本地同步（44KB）；mermaid/highlight 由 lazy-loader 按需注入（本地 vendor 优先，CDN 兜底） -->
+  <script src="frontend-bridge.js"></script>
   <script src="lazy-loader.js"></script>
   <script src="vendor/marked.umd.js"></script>
   <script src="app.js"></script>
