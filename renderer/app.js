@@ -16,6 +16,7 @@
     theme: 'light',
     version: '',
     showPreview: true,
+    previewOnly: false,
     syncScroll: true,
     wrap: true
   };
@@ -163,6 +164,7 @@
   }
 
   // 右侧双击/点击一块 → 左侧选中并滚动到对应源码行
+  // 跳转前临时关闭联动，避免左侧滚动触发右侧跟随滚动导致定位丢失
   function jumpPreviewToSource(el) {
     const pos = Number(el.dataset.srcPos);
     if (!(pos >= 0)) return;
@@ -171,12 +173,17 @@
     const start = srcLineStarts[line];
     const next = line + 1 < srcLineStarts.length ? srcLineStarts[line + 1] : editor.value.length;
     const end = Math.max(start, next - (next > start ? 1 : 0)); // 去掉行尾换行
+    // 临时关闭联动，防止左侧滚动时右侧跟随滚动导致目标位置偏移
+    const wasSync = state.syncScroll;
+    state.syncScroll = false;
     editor.focus();
     editor.setSelectionRange(start, end);
     const lineH = editorLineH || 24;
     editor.scrollTop = line * lineH;
     lineNums.scrollTop = editor.scrollTop;
     updateCursorInfo();
+    // 跳转完成后恢复联动状态
+    state.syncScroll = wasSync;
   }
 
   // 左侧光标位置 → 右侧滚动到最近的预览块并高亮
@@ -909,6 +916,7 @@
       ],
       '视图': [
         { label: '显示预览窗口', checked: () => state.showPreview, action: () => togglePreview() },
+        { label: '仅预览模式', checked: () => state.previewOnly, action: () => togglePreviewOnly() },
         { label: '同步滚动', checked: () => state.syncScroll, action: () => toggleSyncScroll() },
         { label: '自动折行', checked: () => state.wrap, action: () => toggleWrap() },
         { type: 'sep' },
@@ -1063,6 +1071,7 @@
 
   function applyViewPrefs() {
     $('workspace').classList.toggle('no-preview', !state.showPreview);
+    $('workspace').classList.toggle('preview-only', state.previewOnly);
     applyWrap();
   }
 
@@ -1074,8 +1083,22 @@
 
   function togglePreview() {
     state.showPreview = !state.showPreview;
+    // 关闭预览时自动退出仅预览模式
+    if (!state.showPreview && state.previewOnly) {
+      state.previewOnly = false;
+    }
     applyViewPrefs();
     try { localStorage.setItem('md-show-preview', state.showPreview ? '1' : '0'); } catch (e) {}
+  }
+
+  function togglePreviewOnly() {
+    state.previewOnly = !state.previewOnly;
+    // 开启仅预览时确保预览窗口是显示的
+    if (state.previewOnly && !state.showPreview) {
+      state.showPreview = true;
+    }
+    applyViewPrefs();
+    try { localStorage.setItem('md-preview-only', state.previewOnly ? '1' : '0'); } catch (e) {}
   }
 
   function toggleSyncScroll() {
@@ -1310,6 +1333,7 @@
     // 视图偏好恢复（预览显隐 / 滚动同步，默认均开启）
     try {
       if (localStorage.getItem('md-show-preview') === '0') state.showPreview = false;
+      if (localStorage.getItem('md-preview-only') === '1') state.previewOnly = true;
       if (localStorage.getItem('md-sync-scroll') === '0') state.syncScroll = false;
       if (localStorage.getItem('md-wrap') === '0') state.wrap = false;
       editorLineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH;

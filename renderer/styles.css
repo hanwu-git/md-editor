@@ -193,6 +193,8 @@ button { cursor: pointer; }
 #right-pane { flex: 1 1 50%; }
 /* 视图菜单关闭预览时：隐藏右栏与分隔条，左栏自动占满 */
 #workspace.no-preview #right-pane, #workspace.no-preview #divider { display: none; }
+/* 仅预览模式：隐藏左栏与分隔条，右栏自动占满 */
+#workspace.preview-only #left-pane, #workspace.preview-only #divider { display: none; }
 
 .pane-header {
   height: 34px;
