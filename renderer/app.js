@@ -182,8 +182,11 @@
     editor.scrollTop = line * lineH;
     lineNums.scrollTop = editor.scrollTop;
     updateCursorInfo();
-    // 跳转完成后恢复联动状态
+    // 跳转完成后恢复联动状态，并用 scrollSyncLock 锁住一次同步，
+    // 防止编辑器滚动事件触发 syncScrollByRatio(editor, preview) 把预览区带跑
     state.syncScroll = wasSync;
+    scrollSyncLock = true;
+    requestAnimationFrame(() => { scrollSyncLock = false; });
   }
 
   // 左侧光标位置 → 右侧滚动到最近的预览块并高亮
