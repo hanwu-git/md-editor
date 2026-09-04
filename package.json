@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "tauri build && node -e \"const fs=require('fs'),p=require('./package.json'),v=p.version;const s='src-tauri/target/release/md-editor.exe',d='src-tauri/target/release/MD编辑器_'+v+'.exe';fs.copyFileSync(s,d);console.log('Green build:',d)\"",
     "build:nsis": "tauri build --bundles nsis"
   },
   "devDependencies": {
