@@ -195,6 +195,7 @@ button { cursor: pointer; }
 #workspace.no-preview #right-pane, #workspace.no-preview #divider { display: none; }
 /* 仅预览模式：隐藏左栏与分隔条，右栏自动占满 */
 #workspace.preview-only #left-pane, #workspace.preview-only #divider { display: none; }
+#workspace.preview-only #right-pane { width: 100% !important; }
 
 .pane-header {
   height: 34px;
