@@ -2,7 +2,7 @@
 //! 命令名与 frontend-bridge.js 中的 invoke 一一对应。
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use std::fs;
 
@@ -196,17 +196,27 @@ pub fn view_toggle_devtools(window: WebviewWindow) {
     }
 }
 
+// 菜单缩放百分比跟踪（100 = 实际大小）。tauri 2 无读取缩放 API，故本地记录；
+// WebView 原生缩放与 Ctrl+滚轮同体系，set_zoom 后两者状态一致。
+static ZOOM_PCT: AtomicU32 = AtomicU32::new(100);
+
 #[tauri::command]
 pub fn view_zoom_in(window: WebviewWindow) {
-    let _ = window.eval("document.body.style.zoom = (parseFloat(document.body.style.zoom||'1')+0.1).toFixed(2)");
+    // 使用 WebView 原生缩放，避免 CSS zoom 破坏 flex 布局；范围 30%~300%
+    let next = (ZOOM_PCT.load(Ordering::SeqCst) + 10).min(300);
+    ZOOM_PCT.store(next, Ordering::SeqCst);
+    let _ = window.set_zoom(next as f64 / 100.0);
 }
 #[tauri::command]
 pub fn view_zoom_out(window: WebviewWindow) {
-    let _ = window.eval("document.body.style.zoom = Math.max(0.2, parseFloat(document.body.style.zoom||'1')-0.1).toFixed(2)");
+    let next = (ZOOM_PCT.load(Ordering::SeqCst).max(40)) - 10;
+    ZOOM_PCT.store(next, Ordering::SeqCst);
+    let _ = window.set_zoom(next as f64 / 100.0);
 }
 #[tauri::command]
 pub fn view_reset_zoom(window: WebviewWindow) {
-    let _ = window.eval("document.body.style.zoom='1'");
+    ZOOM_PCT.store(100, Ordering::SeqCst);
+    let _ = window.set_zoom(1.0);
 }
 #[tauri::command]
 pub fn view_toggle_fullscreen(window: WebviewWindow) {
