@@ -80,6 +80,13 @@ button { cursor: pointer; }
   line-height: 1.5;
   -webkit-app-region: no-drag;
 }
+.tb-brand {
+  color: rgba(238, 242, 255, 0.85);
+  font-size: 11px;
+  padding: 0 6px;
+  user-select: none;
+  white-space: nowrap;
+}
 .tb-btn {
   color: #cfd8f0; font-size: 12px; padding: 0 8px; line-height: 24px;
   border-radius: 4px; cursor: pointer; user-select: none;

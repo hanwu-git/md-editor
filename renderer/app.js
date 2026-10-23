@@ -550,9 +550,11 @@
   // ============ 标题 / 状态 ============
   function updateTitleBar() {
     const d = state.dirty ? ' · 已修改' : '';
-    const title = `${state.fileName} - MD编辑器 v${state.version}${d}`;
-    $('title-text').textContent = title;
-    if (window.mdAPI) mdAPI.setTitle(title);
+    // 左上角只放当前文件名；应用名+版本号固定显示在右上角主题按钮右侧
+    $('title-text').textContent = state.fileName;
+    $('app-brand').textContent = `MD编辑器 v${state.version}`;
+    // 任务栏原生标题保留应用名便于识别
+    if (window.mdAPI) mdAPI.setTitle(`${state.fileName} - MD编辑器${d}`);
     $('file-name').textContent = state.fileName;
     if (state.dirty) {
       $('dirty-label').textContent = '未保存修改';
