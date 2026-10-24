@@ -206,17 +206,20 @@ pub fn view_zoom_in(window: WebviewWindow) {
     let next = (ZOOM_PCT.load(Ordering::SeqCst) + 10).min(300);
     ZOOM_PCT.store(next, Ordering::SeqCst);
     let _ = window.set_zoom(next as f64 / 100.0);
+    let _ = window.emit("zoom_changed", next);
 }
 #[tauri::command]
 pub fn view_zoom_out(window: WebviewWindow) {
     let next = (ZOOM_PCT.load(Ordering::SeqCst).max(40)) - 10;
     ZOOM_PCT.store(next, Ordering::SeqCst);
     let _ = window.set_zoom(next as f64 / 100.0);
+    let _ = window.emit("zoom_changed", next);
 }
 #[tauri::command]
 pub fn view_reset_zoom(window: WebviewWindow) {
     ZOOM_PCT.store(100, Ordering::SeqCst);
     let _ = window.set_zoom(1.0);
+    let _ = window.emit("zoom_changed", 100);
 }
 #[tauri::command]
 pub fn view_toggle_fullscreen(window: WebviewWindow) {

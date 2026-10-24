@@ -1210,6 +1210,12 @@
       }
     });
     mdAPI.onThemeCommand((theme) => applyTheme(theme));
+    // 状态栏缩放控件：点击 +/− 调整缩放，点击百分比恢复实际大小
+    $('zoom-in-btn').addEventListener('click', () => mdAPI.zoomIn());
+    $('zoom-out-btn').addEventListener('click', () => mdAPI.zoomOut());
+    $('zoom-level').addEventListener('click', () => mdAPI.resetZoom());
+    // 缩放变化统一由后端推送（菜单/状态栏/原生菜单三种入口都同步）
+    mdAPI.onZoomChanged((pct) => { $('zoom-level').textContent = pct + '%'; });
     mdAPI.getVersion().then((v) => {
       state.version = v;
       updateTitleBar();

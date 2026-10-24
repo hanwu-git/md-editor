@@ -93,6 +93,21 @@ button { cursor: pointer; }
   -webkit-app-region: no-drag;
 }
 
+/* ============ 状态栏缩放控件 ============ */
+#zoom-controls { display: flex; align-items: center; gap: 1px; margin-left: 4px; }
+.zoom-btn {
+  cursor: pointer; user-select: none;
+  color: var(--t3); font-size: 14px; line-height: 18px;
+  padding: 0 7px; border-radius: 4px; font-family: Consolas, monospace;
+}
+.zoom-btn:hover { background: var(--accent-soft); color: var(--accent); }
+#zoom-level {
+  cursor: pointer; user-select: none;
+  color: var(--t3); font-size: 11px; line-height: 18px;
+  min-width: 38px; text-align: center; padding: 0 3px; border-radius: 4px;
+}
+#zoom-level:hover { background: var(--accent-soft); color: var(--accent); }
+
 /* ============ 菜单栏 ============ */
 #menubar {
   height: 30px;

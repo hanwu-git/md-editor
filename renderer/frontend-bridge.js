@@ -63,5 +63,6 @@
     onRecentUpdated: (cb) => { if (T && T.event) T.event.listen('recent_updated', (x) => cb(x.payload)); },
     onOpenFile:      (cb) => { if (T && T.event) T.event.listen('app_open_file', (x) => cb(x.payload)); },
     onThemeCommand:  (cb) => { if (T && T.event) T.event.listen('theme_set', (x) => cb(x.payload)); },
+    onZoomChanged:   (cb) => { if (T && T.event) T.event.listen('zoom_changed', (x) => cb(x.payload)); },
   };
 })();
