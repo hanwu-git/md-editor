@@ -30,6 +30,7 @@
     zoomIn:          () => call('view_zoom_in'),
     zoomOut:         () => call('view_zoom_out'),
     resetZoom:       () => call('view_reset_zoom'),
+    syncZoom:        (pct) => call('view_sync_zoom', { pct }),
     toggleFullscreen:() => call('view_toggle_fullscreen'),
 
     readClipboard:   () => call('edit_read_clipboard'),

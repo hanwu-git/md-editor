@@ -221,6 +221,13 @@ pub fn view_reset_zoom(window: WebviewWindow) {
     let _ = window.set_zoom(1.0);
     let _ = window.emit("zoom_changed", 100);
 }
+// 同步前端检测到的原生缩放（Ctrl+滚轮）到后端记录；WebView 已自行缩放，此处不重复 set_zoom
+#[tauri::command]
+pub fn view_sync_zoom(window: WebviewWindow, pct: u32) {
+    let p = pct.clamp(30, 300);
+    ZOOM_PCT.store(p, Ordering::SeqCst);
+    let _ = window.emit("zoom_changed", p);
+}
 #[tauri::command]
 pub fn view_toggle_fullscreen(window: WebviewWindow) {
     let is = window.is_fullscreen().unwrap_or(false);

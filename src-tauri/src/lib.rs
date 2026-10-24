@@ -41,6 +41,7 @@ pub fn run() {
             commands::view_zoom_in,
             commands::view_zoom_out,
             commands::view_reset_zoom,
+            commands::view_sync_zoom,
             commands::view_toggle_fullscreen,
             commands::edit_read_clipboard,
             commands::window_set_title,

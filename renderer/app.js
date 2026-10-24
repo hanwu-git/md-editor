@@ -1215,7 +1215,25 @@
     $('zoom-out-btn').addEventListener('click', () => mdAPI.zoomOut());
     $('zoom-level').addEventListener('click', () => mdAPI.resetZoom());
     // 缩放变化统一由后端推送（菜单/状态栏/原生菜单三种入口都同步）
-    mdAPI.onZoomChanged((pct) => { $('zoom-level').textContent = pct + '%'; });
+    const baseDpr = window.devicePixelRatio || 1;
+    mdAPI.onZoomChanged((pct) => {
+      $('zoom-level').textContent = pct + '%';
+      // 标题栏与状态栏反向补偿（zoom=100/pct），缩放时保持原大小不联动
+      const comp = String(100 / pct);
+      $('titlebar').style.zoom = comp;
+      $('statusbar').style.zoom = comp;
+    });
+    // Ctrl+滚轮等原生缩放不经过后端命令：通过 devicePixelRatio 变化检测并同步
+    function watchDpr() {
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      mq.addEventListener('change', () => {
+        watchDpr();
+        const raw = (window.devicePixelRatio / baseDpr) * 100;
+        const pct = Math.min(300, Math.max(30, Math.round(raw / 10) * 10));
+        mdAPI.syncZoom(pct);
+      });
+    }
+    watchDpr();
     mdAPI.getVersion().then((v) => {
       state.version = v;
       updateTitleBar();
