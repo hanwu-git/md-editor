@@ -202,23 +202,20 @@ static ZOOM_PCT: AtomicU32 = AtomicU32::new(100);
 
 #[tauri::command]
 pub fn view_zoom_in(window: WebviewWindow) {
-    // 使用 WebView 原生缩放，避免 CSS zoom 破坏 flex 布局；范围 30%~300%
+    // 缩放由前端 CSS 实现（只缩放内容区，标题栏/状态栏不动）；后端仅记录并广播
     let next = (ZOOM_PCT.load(Ordering::SeqCst) + 10).min(300);
     ZOOM_PCT.store(next, Ordering::SeqCst);
-    let _ = window.set_zoom(next as f64 / 100.0);
     let _ = window.emit("zoom_changed", next);
 }
 #[tauri::command]
 pub fn view_zoom_out(window: WebviewWindow) {
     let next = (ZOOM_PCT.load(Ordering::SeqCst).max(40)) - 10;
     ZOOM_PCT.store(next, Ordering::SeqCst);
-    let _ = window.set_zoom(next as f64 / 100.0);
     let _ = window.emit("zoom_changed", next);
 }
 #[tauri::command]
 pub fn view_reset_zoom(window: WebviewWindow) {
     ZOOM_PCT.store(100, Ordering::SeqCst);
-    let _ = window.set_zoom(1.0);
     let _ = window.emit("zoom_changed", 100);
 }
 // 同步前端检测到的原生缩放（Ctrl+滚轮）到后端记录；WebView 已自行缩放，此处不重复 set_zoom

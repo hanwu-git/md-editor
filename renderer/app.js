@@ -548,13 +548,16 @@
   }
 
   // ============ 缩放（统一入口）============
-  // 前端先预测性设置标题栏/状态栏反向补偿，再调用后端缩放命令，两者合并到同一次渲染，消除"先变大再拉回"的闪动
+  // 缩放用 CSS zoom 只作用于 #workspace（内容区），标题栏/菜单/标签/状态栏不在缩放子树内，天然不动、零闪动；
+  // workspace 布局盒按 100/z% 反补偿，避免溢出视口
   let zoomPct = 100;
   function applyZoomUI(pct) {
     $('zoom-level').textContent = pct + '%';
-    const comp = String(100 / pct);
-    $('titlebar').style.zoom = comp;
-    $('statusbar').style.zoom = comp;
+    const ws = $('workspace');
+    const z = pct / 100;
+    ws.style.zoom = String(z);
+    ws.style.width = (100 / z) + '%';
+    ws.style.height = (100 / z) + '%';
   }
   function zoomTo(target, cmd) {
     zoomPct = Math.min(300, Math.max(30, target));
@@ -1234,18 +1237,20 @@
       zoomPct = pct;
       applyZoomUI(pct);
     });
-    // Ctrl+滚轮等原生缩放不经过后端命令：通过 devicePixelRatio 变化检测并同步
-    const baseDpr = window.devicePixelRatio || 1;
-    function watchDpr() {
-      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-      mq.addEventListener('change', () => {
-        watchDpr();
-        const raw = (window.devicePixelRatio / baseDpr) * 100;
-        const pct = Math.min(300, Math.max(30, Math.round(raw / 10) * 10));
-        mdAPI.syncZoom(pct);
-      });
-    }
-    watchDpr();
+    // 拦截 Ctrl+滚轮与 Ctrl+=/-/0 浏览器原生缩放，统一走 CSS 缩放（避免整页缩放导致标题栏闪动）
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        zoomTo(zoomPct + (e.deltaY < 0 ? 10 : -10), () => mdAPI.syncZoom(zoomPct));
+      }
+    }, { passive: false });
+    window.addEventListener('keydown', (e) => {
+      if (!e.ctrlKey || e.altKey) return;
+      const k = e.key;
+      if (k === '=' || k === '+') { e.preventDefault(); zoomTo(zoomPct + 10, () => mdAPI.syncZoom(zoomPct)); }
+      else if (k === '-') { e.preventDefault(); zoomTo(zoomPct - 10, () => mdAPI.syncZoom(zoomPct)); }
+      else if (k === '0') { e.preventDefault(); zoomTo(100, () => mdAPI.syncZoom(100)); }
+    });
     mdAPI.getVersion().then((v) => {
       state.version = v;
       updateTitleBar();
