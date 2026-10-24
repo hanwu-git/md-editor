@@ -547,6 +547,21 @@
     });
   }
 
+  // ============ 缩放（统一入口）============
+  // 前端先预测性设置标题栏/状态栏反向补偿，再调用后端缩放命令，两者合并到同一次渲染，消除"先变大再拉回"的闪动
+  let zoomPct = 100;
+  function applyZoomUI(pct) {
+    $('zoom-level').textContent = pct + '%';
+    const comp = String(100 / pct);
+    $('titlebar').style.zoom = comp;
+    $('statusbar').style.zoom = comp;
+  }
+  function zoomTo(target, cmd) {
+    zoomPct = Math.min(300, Math.max(30, target));
+    applyZoomUI(zoomPct);
+    cmd();
+  }
+
   // ============ 标题 / 状态 ============
   function updateTitleBar() {
     const d = state.dirty ? ' · 已修改' : '';
@@ -929,9 +944,9 @@
         { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => { if (window.mdAPI) mdAPI.toggleDevTools(); } },
         { type: 'sep' },
         { title: '缩放' },
-        { label: '实际大小', acc: 'Ctrl+0', action: () => { if (window.mdAPI) mdAPI.resetZoom(); } },
-        { label: '放大', acc: 'Ctrl++', action: () => { if (window.mdAPI) mdAPI.zoomIn(); } },
-        { label: '缩小', acc: 'Ctrl+-', action: () => { if (window.mdAPI) mdAPI.zoomOut(); } },
+        { label: '实际大小', acc: 'Ctrl+0', action: () => { if (window.mdAPI) zoomTo(100, mdAPI.resetZoom); } },
+        { label: '放大', acc: 'Ctrl++', action: () => { if (window.mdAPI) zoomTo(zoomPct + 10, mdAPI.zoomIn); } },
+        { label: '缩小', acc: 'Ctrl+-', action: () => { if (window.mdAPI) zoomTo(zoomPct - 10, mdAPI.zoomOut); } },
         { type: 'sep' },
         { label: '全屏', acc: 'F11', action: () => { if (window.mdAPI) mdAPI.toggleFullscreen(); } }
       ],
@@ -1211,19 +1226,16 @@
     });
     mdAPI.onThemeCommand((theme) => applyTheme(theme));
     // 状态栏缩放控件：点击 +/− 调整缩放，点击百分比恢复实际大小
-    $('zoom-in-btn').addEventListener('click', () => mdAPI.zoomIn());
-    $('zoom-out-btn').addEventListener('click', () => mdAPI.zoomOut());
-    $('zoom-level').addEventListener('click', () => mdAPI.resetZoom());
-    // 缩放变化统一由后端推送（菜单/状态栏/原生菜单三种入口都同步）
-    const baseDpr = window.devicePixelRatio || 1;
+    $('zoom-in-btn').addEventListener('click', () => zoomTo(zoomPct + 10, mdAPI.zoomIn));
+    $('zoom-out-btn').addEventListener('click', () => zoomTo(zoomPct - 10, mdAPI.zoomOut));
+    $('zoom-level').addEventListener('click', () => zoomTo(100, mdAPI.resetZoom));
+    // 缩放变化由后端推送校准（菜单/状态栏入口已预测设置，此处通常无视觉变化；原生菜单入口靠此补偿）
     mdAPI.onZoomChanged((pct) => {
-      $('zoom-level').textContent = pct + '%';
-      // 标题栏与状态栏反向补偿（zoom=100/pct），缩放时保持原大小不联动
-      const comp = String(100 / pct);
-      $('titlebar').style.zoom = comp;
-      $('statusbar').style.zoom = comp;
+      zoomPct = pct;
+      applyZoomUI(pct);
     });
     // Ctrl+滚轮等原生缩放不经过后端命令：通过 devicePixelRatio 变化检测并同步
+    const baseDpr = window.devicePixelRatio || 1;
     function watchDpr() {
       const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
       mq.addEventListener('change', () => {
