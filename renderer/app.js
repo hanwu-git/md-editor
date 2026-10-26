@@ -549,15 +549,16 @@
 
   // ============ 缩放（统一入口）============
   // 缩放用 CSS zoom 只作用于 #workspace（内容区），标题栏/菜单/标签/状态栏不在缩放子树内，天然不动、零闪动；
-  // workspace 布局盒按 100/z% 反补偿，避免溢出视口
+  // zoom 生效后 #workspace 的局部布局盒自动变为父容器的 1/z，渲染时再放大 z 倍，视觉上正好铺满视口，
+  // 因此不能再对 width/height 做 100/z% 反补偿（那会在局部盒里再缩一次，放大时只剩 1/z 宽度）
   let zoomPct = 100;
   function applyZoomUI(pct) {
     $('zoom-level').textContent = pct + '%';
     const ws = $('workspace');
-    const z = pct / 100;
-    ws.style.zoom = String(z);
-    ws.style.width = (100 / z) + '%';
-    ws.style.height = (100 / z) + '%';
+    ws.style.zoom = String(pct / 100);
+    // 清掉旧版本留下的反补偿值，交回 flex 布局铺满
+    ws.style.width = '';
+    ws.style.height = '';
   }
   function zoomTo(target, cmd) {
     zoomPct = Math.min(300, Math.max(30, target));
