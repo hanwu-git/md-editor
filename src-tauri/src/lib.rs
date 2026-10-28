@@ -4,8 +4,12 @@ mod recent;
 
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use std::sync::Mutex;
 
 const APP_NAME: &str = "MD编辑器";
+
+/// 启动命令行待打开文件：前端初始化时通过 app_take_pending_file 取走（启动握手）
+pub static PENDING_FILE: Mutex<Option<String>> = Mutex::new(None);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -36,6 +40,7 @@ pub fn run() {
             commands::dialog_save_file_as,
             commands::app_get_recent,
             commands::app_get_version,
+            commands::app_take_pending_file,
             commands::dialog_confirm_exit,
             commands::view_toggle_devtools,
             commands::view_zoom_in,
@@ -58,6 +63,16 @@ pub fn run() {
         .setup(move |app| {
             setup_window_menu(app.handle())?;
             command_line_open(app.handle());
+            // 兜底：若前端初始化失败未显示窗口，5 秒后强制显示，避免"永远白屏/无窗口"
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                if let Some(win) = handle.get_webview_window("main") {
+                    if !win.is_visible().unwrap_or(true) {
+                        let _ = win.show();
+                    }
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -78,17 +93,14 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// 启动时命令行传参文件：延迟等前端 ready 后转发（全局 emit，前端 listen 可收）
+/// 启动时命令行传参文件：存入 PENDING_FILE，由前端初始化时主动取走（消除 1.5s 延迟与欢迎页闪现）
 fn command_line_open(app: &AppHandle) {
     let args: Vec<String> = std::env::args().collect();
-    let Some(file) = extract_file_path(&args) else {
-        return;
-    };
-    let handle = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(1500));
-        let _ = handle.emit("app_open_file", file.clone());
-    });
+    if let Some(file) = extract_file_path(&args) {
+        if let Ok(mut g) = PENDING_FILE.lock() {
+            *g = Some(file);
+        }
+    }
 }
 
 /// 构建应原生菜单（快捷键承载；点击转发事件到前端）

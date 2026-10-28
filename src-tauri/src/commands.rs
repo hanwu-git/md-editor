@@ -15,6 +15,13 @@ pub static QUIT_APPROVED: AtomicBool = AtomicBool::new(false);
 pub fn set_quit_approved(v: bool) { QUIT_APPROVED.store(v, Ordering::SeqCst); }
 pub fn quit_approved() -> bool { QUIT_APPROVED.load(Ordering::SeqCst) }
 
+/// 启动握手：前端初始化时取走命令行待打开文件（无则 None）
+/// 替代旧的"延迟 1.5s emit app_open_file"，消除启动后先渲染欢迎页再跳目标文件的闪现
+#[tauri::command]
+pub fn app_take_pending_file() -> Option<String> {
+    crate::PENDING_FILE.lock().ok().and_then(|mut g| g.take())
+}
+
 // ---------- 数据结构 ----------
 
 #[derive(Serialize, Deserialize)]

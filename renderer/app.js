@@ -121,8 +121,11 @@
   // 会被 WebView 解析到应用内部地址导致全部裂图。这里复用本地图片管线，
   // 把非网络/data 的 src 换成 data URL。带内存缓存，避免每次输入后整篇重载。
   const nativeImgCache = new Map(); // abs -> dataUrl
+  // 原生 <img>（非 Markdown 语法）管线：串行渐进加载，避免大文档数百张图同时
+  // IPC 读取+解码造成卡顿；配合 loading=lazy，视口外图片滚动到才解码
   function loadNativeImages() {
     if (!window.mdAPI || !window.mdAPI.readImageBytes) return;
+    const pending = [];
     preview.querySelectorAll('img').forEach((img) => {
       if (img.closest('.md-img')) return;            // Markdown 语法图片由 data-mdimage 管线处理
       const raw = img.getAttribute('src');
@@ -131,18 +134,29 @@
       if (!abs) return;
       if (/^data:/i.test(abs) || /^https?:\/\//i.test(abs)) { img.dataset.nativeDone = '1'; return; }
       img.dataset.nativeDone = '1';
+      img.loading = 'lazy';
+      img.decoding = 'async';
       const cached = nativeImgCache.get(abs);
       if (cached) { img.src = cached; return; }
-      window.mdAPI.readImageBytes(abs).then((bytes) => {
-        if (Array.isArray(bytes) && bytes.length) {
-          const url = dataUrl(bytes, abs);
-          nativeImgCache.set(abs, url);
-          img.src = url;
-        } else {
-          img.alt = '(图片加载失败)';
-        }
-      }).catch(() => { img.alt = '(图片加载失败)'; });
+      pending.push([img, abs]);
     });
+    // 串行队列：一张读完换下一张，UI 保持流畅，图片自上而下渐进出现；
+    // 重渲染后旧队列中引用的 img 已被丢弃，仅缓存照常生效
+    let chain = Promise.resolve();
+    for (const [img, abs] of pending) {
+      chain = chain
+        .then(() => window.mdAPI.readImageBytes(abs))
+        .then((bytes) => {
+          if (Array.isArray(bytes) && bytes.length) {
+            const url = dataUrl(bytes, abs);
+            nativeImgCache.set(abs, url);
+            img.src = url;
+          } else {
+            img.alt = '(图片加载失败)';
+          }
+        })
+        .catch(() => { img.alt = '(图片加载失败)'; });
+    }
   }
 
   // ============ 渲染管线 ============
@@ -1604,8 +1618,6 @@
     initSearchbar();
     initEncodingPicker();
 
-    maybeAskSetDefaultAssoc();
-
     // 初始示例内容（不含 mermaid，避免首启触发 3.4MB 懒加载）
     const sample = `# 欢迎使用 MD编辑器
 
@@ -1627,17 +1639,41 @@ app.render();
 
 > 提示：按 Ctrl+S 保存文件，Ctrl+Shift+S 另存为。全程离线运行。
 `;
-    // 首个文档作为欢迎页；打开其他内容时若未被编辑则自动关闭
-    const t0 = makeTab();
-    t0.content = sample;
-    t0.welcome = true;
-    state.activeTabId = t0.id;
-    editor.value = sample;
-    updateLineNumbers();
-    renderAll();
-    updateCursorInfo();
-    updateTitleBar();
-    renderTabs();
+
+    // 首帧渲染完成后显示窗口（tauri.conf 窗口 visible:false，消除启动白框），
+    // 再执行"设为默认编辑器"询问（窗口隐藏时弹 confirm 会造成无窗口假死）
+    const showNow = () => {
+      try { if (mdAPI.showWindow) mdAPI.showWindow(); } catch (e) {}
+      maybeAskSetDefaultAssoc();
+    };
+
+    // 启动握手：命令行/文件关联传入的文件直接作为首个内容（跳过欢迎页，消除闪现）；
+    // 无待打开文件时渲染欢迎页（首个文档作为欢迎页，打开其他内容时若未被编辑则自动关闭）
+    const bootWelcome = () => {
+      const t0 = makeTab();
+      t0.content = sample;
+      t0.welcome = true;
+      state.activeTabId = t0.id;
+      editor.value = sample;
+      updateLineNumbers();
+      renderAll();
+      updateCursorInfo();
+      updateTitleBar();
+      renderTabs();
+      showNow();
+    };
+    if (mdAPI && mdAPI.takePendingFile) {
+      mdAPI.takePendingFile().then(async (f) => {
+        if (f) {
+          try { await openRecent(f); } catch (e) { bootWelcome(); return; }
+          showNow();
+        } else {
+          bootWelcome();
+        }
+      }).catch(() => bootWelcome());
+    } else {
+      bootWelcome();
+    }
   }
 
   if (document.readyState === 'loading') {

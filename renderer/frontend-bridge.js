@@ -25,6 +25,10 @@
     confirmExit:     (fileName) => call('dialog_confirm_exit', { fileName: fileName || '' }),
     getVersion:      () => call('app_get_version'),
     getRecent:       () => call('app_get_recent'),
+    // 启动握手：取走命令行待打开文件（无则 null）
+    takePendingFile: () => call('app_take_pending_file'),
+    // 首帧渲染完成后显示窗口（tauri.conf 窗口 visible:false，消除启动白框）
+    showWindow:      () => { try { if (T && T.window) T.window.getCurrentWindow().show(); } catch (e) {} },
 
     toggleDevTools:  () => call('view_toggle_devtools'),
     zoomIn:          () => call('view_zoom_in'),
