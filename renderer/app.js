@@ -233,27 +233,25 @@
   }
 
   // 右侧双击/点击一块 → 左侧选中并滚动到对应源码行
-  // 跳转前临时关闭联动，避免左侧滚动触发右侧跟随滚动导致定位丢失
+  // 联动开启时双击定位：先自动取消联动并同步状态栏/菜单显示（不再自动恢复），
+  // 否则恢复联动后编辑器滚动事件会按比例把预览带跑，目标块脱离视野
   function jumpPreviewToSource(el) {
     const pos = Number(el.dataset.srcPos);
     if (!(pos >= 0)) return;
+    if (state.syncScroll) setSyncScroll(false);
     flashEl(el);
     const line = lineOf(pos);
     const start = srcLineStarts[line];
     const next = line + 1 < srcLineStarts.length ? srcLineStarts[line + 1] : editor.value.length;
     const end = Math.max(start, next - (next > start ? 1 : 0)); // 去掉行尾换行
-    // 临时关闭联动，防止左侧滚动时右侧跟随滚动导致目标位置偏移
-    const wasSync = state.syncScroll;
-    state.syncScroll = false;
     editor.focus();
     editor.setSelectionRange(start, end);
-    const lineH = editorLineH || 24;
+    // 行高实时测量：CSS 缩放会放大实际行高，启动时测的固定值会定位偏移
+    const lineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH || 24;
     editor.scrollTop = line * lineH;
     lineNums.scrollTop = editor.scrollTop;
     updateCursorInfo();
-    // 跳转完成后恢复联动状态，并用 scrollSyncLock 锁住一次同步，
-    // 防止编辑器滚动事件触发 syncScrollByRatio(editor, preview) 把预览区带跑
-    state.syncScroll = wasSync;
+    // 锁住一帧同步，防残留滚动事件把预览带跑
     scrollSyncLock = true;
     requestAnimationFrame(() => { scrollSyncLock = false; });
   }
@@ -1195,9 +1193,23 @@
     try { localStorage.setItem('md-preview-only', state.previewOnly ? '1' : '0'); } catch (e) {}
   }
 
-  function toggleSyncScroll() {
-    state.syncScroll = !state.syncScroll;
+  // 联动开关统一入口：状态栏控件与视图菜单共用，保证两处显示一致
+  function setSyncScroll(on) {
+    state.syncScroll = !!on;
+    updateSyncToggleUI();
     try { localStorage.setItem('md-sync-scroll', state.syncScroll ? '1' : '0'); } catch (e) {}
+  }
+
+  function toggleSyncScroll() {
+    setSyncScroll(!state.syncScroll);
+  }
+
+  // 状态栏联动指示控件：开=高亮，关=置灰，点击切换
+  function updateSyncToggleUI() {
+    const chip = $('sync-toggle');
+    if (!chip) return;
+    chip.textContent = state.syncScroll ? '联动 开' : '联动 关';
+    chip.classList.toggle('on', state.syncScroll);
   }
 
   function toggleWrap() {
@@ -1303,6 +1315,8 @@
     $('zoom-in-btn').addEventListener('click', () => zoomTo(zoomPct + 10, mdAPI.zoomIn));
     $('zoom-out-btn').addEventListener('click', () => zoomTo(zoomPct - 10, mdAPI.zoomOut));
     $('zoom-level').addEventListener('click', () => zoomTo(100, mdAPI.resetZoom));
+    // 状态栏联动指示控件：点击切换左右滚动联动
+    $('sync-toggle').addEventListener('click', toggleSyncScroll);
     // 缩放变化由后端推送校准（菜单/状态栏入口已预测设置，此处通常无视觉变化；原生菜单入口靠此补偿）
     mdAPI.onZoomChanged((pct) => {
       zoomPct = pct;
@@ -1455,6 +1469,7 @@
       if (localStorage.getItem('md-wrap') === '0') state.wrap = false;
       editorLineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH;
     } catch (e) {}
+    updateSyncToggleUI();
     applyViewPrefs();
 
     buildMenubar();

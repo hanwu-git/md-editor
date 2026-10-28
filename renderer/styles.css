@@ -108,6 +108,19 @@ button { cursor: pointer; }
 }
 #zoom-level:hover { background: var(--accent-soft); color: var(--accent); }
 
+/* ============ 状态栏联动指示控件 ============ */
+.st-chip {
+  cursor: pointer; user-select: none;
+  color: var(--t3); font-size: 11px; line-height: 18px;
+  padding: 0 8px; border-radius: 9px; margin-left: 6px;
+  border: 1px solid transparent;
+}
+.st-chip:hover { background: var(--accent-soft); }
+.st-chip.on {
+  color: var(--accent); background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
 /* ============ 菜单栏 ============ */
 #menubar {
   height: 30px;
