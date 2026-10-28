@@ -232,10 +232,37 @@
     setTimeout(() => el && el.classList.remove('flash'), 1200);
   }
 
+  // 镜像测距：计算源码偏移在编辑区内容坐标系中的视觉 Y（px，含软换行与 CSS 缩放）。
+  // 按"行号×行高"估算在自动折行长段落（如图片下方的大段文字）下会大幅偏移，
+  // 用同样式隐藏镜像 div 精确测出该偏移折行后的真实位置
+  const _caretMirror = document.createElement('div');
+  function caretVisualTop(ta, offset) {
+    const cs = getComputedStyle(ta);
+    const m = _caretMirror;
+    m.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden;margin:0;border:0;padding:0;box-sizing:content-box;';
+    m.style.width = (ta.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) + 'px';
+    m.style.fontFamily = cs.fontFamily;
+    m.style.fontSize = cs.fontSize;
+    m.style.fontWeight = cs.fontWeight;
+    m.style.fontStyle = cs.fontStyle;
+    m.style.letterSpacing = cs.letterSpacing;
+    m.style.lineHeight = cs.lineHeight;
+    m.style.tabSize = cs.tabSize;
+    // 与 #editor / #editor.wrap 的换行行为保持一致
+    if (state.wrap) { m.style.whiteSpace = 'pre-wrap'; m.style.overflowWrap = 'anywhere'; }
+    else { m.style.whiteSpace = 'pre'; m.style.overflowWrap = 'normal'; }
+    m.textContent = ta.value.slice(0, offset);
+    const marker = document.createElement('span');
+    marker.textContent = '\u200b';
+    m.appendChild(marker);
+    if (!m.parentNode) (ta.parentNode || document.body).appendChild(m);
+    return marker.offsetTop;
+  }
+
   // 右侧双击/点击一块 → 左侧选中并滚动到对应源码行
   // 联动开启时双击定位：先自动取消联动并同步状态栏/菜单显示（不再自动恢复），
   // 否则恢复联动后编辑器滚动事件会按比例把预览带跑，目标块脱离视野
-  function jumpPreviewToSource(el) {
+  function jumpPreviewToSource(el, clickFrac) {
     const pos = Number(el.dataset.srcPos);
     if (!(pos >= 0)) return;
     if (state.syncScroll) setSyncScroll(false);
@@ -246,9 +273,21 @@
     const end = Math.max(start, next - (next > start ? 1 : 0)); // 去掉行尾换行
     editor.focus();
     editor.setSelectionRange(start, end);
-    // 行高实时测量：CSS 缩放会放大实际行高，启动时测的固定值会定位偏移
-    const lineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH || 24;
-    editor.scrollTop = line * lineH;
+    // 精确定位：把目标行滚到与预览点击点相同的相对高度；
+    // 镜像测距失败时回退"行号×实时行高"估算
+    const vpH = editor.clientHeight;
+    let top = -1;
+    try { top = caretVisualTop(editor, start); } catch (e) { top = -1; }
+    if (top >= 0) {
+      const padTop = parseFloat(getComputedStyle(editor).paddingTop) || 0;
+      const frac = (typeof clickFrac === 'number' && isFinite(clickFrac)) ? Math.min(0.85, Math.max(0, clickFrac)) : 0;
+      const target = padTop + top - frac * vpH;
+      const maxTop = Math.max(0, editor.scrollHeight - vpH);
+      editor.scrollTop = Math.max(0, Math.min(maxTop, target));
+    } else {
+      const lineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH || 24;
+      editor.scrollTop = line * lineH;
+    }
     lineNums.scrollTop = editor.scrollTop;
     updateCursorInfo();
     // 锁住一帧同步，防残留滚动事件把预览带跑
@@ -430,9 +469,10 @@
   // ============ 查找 / 替换 ============
   const search = {
     term: '',           // 当前搜索词
-    matches: [],        // 匹配区间数组 [[start, end], ...]
+    matches: [],        // 匹配区间数组 [[start, end], ...]；预览范围时为命中节点信息数组
     current: -1,        // 当前高亮索引
-    caseSensitive: false
+    caseSensitive: false,
+    scope: 'src'        // 搜索范围：src=原文窗口，preview=预览窗口
   };
 
   function getMatches(term) {
@@ -451,8 +491,61 @@
     return res;
   }
 
+  // 预览范围查找：把预览文本节点中的命中包上 <mark class="search-hit">，
+  // 文档序与 search.matches 对齐，供上一处/下一处导航
+  function clearPreviewMarks() {
+    preview.querySelectorAll('mark.search-hit').forEach((m) => {
+      const parent = m.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(m.textContent), m);
+      parent.normalize();
+    });
+  }
+
+  function getPreviewMatches(term) {
+    clearPreviewMarks();
+    if (!term) return [];
+    const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => {
+        const p = n.parentNode;
+        if (!p || p.nodeName === 'MARK' || p.nodeName === 'SCRIPT' || p.nodeName === 'STYLE') return NodeFilter.FILTER_REJECT;
+        return n.nodeValue && n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }
+    });
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    const needle = search.caseSensitive ? term : term.toLowerCase();
+    const hits = [];
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      const hay = search.caseSensitive ? text : text.toLowerCase();
+      let idx = 0;
+      while (true) {
+        const pos = hay.indexOf(needle, idx);
+        if (pos === -1) break;
+        hits.push({ node, start: pos, end: pos + term.length });
+        idx = pos + term.length;
+      }
+    }
+    // 倒序包裹，同一节点内的多处命中不会因前面的替换而失效
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const { node, start, end } = hits[i];
+      if (!node.parentNode) continue;
+      try {
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, end);
+        const mark = document.createElement('mark');
+        mark.className = 'search-hit';
+        range.surroundContents(mark);
+      } catch (e) { /* 越界等异常命中跳过 */ }
+    }
+    return hits;
+  }
+
   function updateMatches() {
-    search.matches = getMatches(search.term);
+    search.matches = search.scope === 'preview' ? getPreviewMatches(search.term) : getMatches(search.term);
     search.current = search.matches.length ? 0 : -1;
     renderSearch();
     updateSearchCount();
@@ -460,6 +553,16 @@
 
   function renderSearch() {
     if (!search.term) return;
+    if (search.scope === 'preview') {
+      const marks = preview.querySelectorAll('mark.search-hit');
+      marks.forEach((m) => m.classList.remove('current'));
+      const cur = marks[search.current];
+      if (cur) {
+        cur.classList.add('current');
+        cur.scrollIntoView({ block: 'center' });
+      }
+      return;
+    }
     if (search.current >= 0 && search.matches[search.current]) {
       const [s, e] = search.matches[search.current];
       editor.focus();
@@ -475,7 +578,8 @@
 
   function openSearch(showReplace) {
     $('searchbar').classList.remove('hidden');
-    $('replace-row').classList.toggle('hidden', !showReplace);
+    // 替换只对原文生效；预览范围下隐藏替换行
+    $('replace-row').classList.toggle('hidden', !(showReplace && search.scope === 'src'));
     $('search-input').focus();
     $('search-input').select();
     if (!search.term) {
@@ -487,7 +591,19 @@
 
   function closeSearch() {
     $('searchbar').classList.add('hidden');
+    clearPreviewMarks();
     editor.focus();
+  }
+
+  // 切换搜索范围：原文 / 预览
+  function setSearchScope(scope) {
+    if (search.scope === scope) return;
+    clearPreviewMarks();
+    search.scope = scope;
+    $('scope-src').classList.toggle('active', scope === 'src');
+    $('scope-preview').classList.toggle('active', scope === 'preview');
+    if (scope === 'preview') $('replace-row').classList.add('hidden');
+    updateMatches();
   }
 
   function searchNext() {
@@ -505,6 +621,7 @@
   }
 
   function replaceOne() {
+    if (search.scope === 'preview') return; // 替换仅支持原文范围
     if (!search.term || search.current < 0) return;
     const [s, e] = search.matches[search.current];
     const rep = $('replace-input').value;
@@ -518,6 +635,7 @@
   }
 
   function replaceAll() {
+    if (search.scope === 'preview') return; // 替换仅支持原文范围
     if (!search.term) return;
     const rep = $('replace-input').value || '';
     const text = editor.value;
@@ -538,6 +656,9 @@
   }
 
   function initSearchbar() {
+    // 搜索范围切换：原文 / 预览
+    $('scope-src').addEventListener('click', () => { setSearchScope('src'); $('search-input').focus(); });
+    $('scope-preview').addEventListener('click', () => { setSearchScope('preview'); $('search-input').focus(); });
     $('search-case').addEventListener('click', () => {
       search.caseSensitive = !search.caseSensitive;
       $('search-case').classList.toggle('active', search.caseSensitive);
@@ -1425,10 +1546,16 @@
   editor.addEventListener('click', scheduleJumpEditor);
   editor.addEventListener('keyup', scheduleJumpEditor);
   editor.addEventListener('input', scheduleJumpEditor);
-  // 右侧预览：双击某块 → 左侧选中并滚动到对应源码行
+  // 右侧预览：双击某块 → 左侧选中并滚动到对应源码行，落位高度跟随点击点在预览中的相对位置
   preview.addEventListener('dblclick', (e) => {
     const el = e.target && e.target.closest ? e.target.closest('[data-src-pos]') : null;
-    if (el) jumpPreviewToSource(el);
+    if (!el) return;
+    let frac = 0;
+    try {
+      const r = preview.getBoundingClientRect();
+      frac = (e.clientY - r.top) / Math.max(1, r.height);
+    } catch (err) { frac = 0; }
+    jumpPreviewToSource(el, frac);
   });
 
   // 外链系统浏览器打开（v6.0.1）：拦截预览区 <a> 点击，http(s) 链接交后端调系统浏览器

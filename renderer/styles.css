@@ -562,6 +562,20 @@ button { cursor: pointer; }
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* 搜索范围切换（原文/预览） */
+.search-scope { display: flex; }
+.search-scope button:first-child { border-radius: 4px 0 0 4px; }
+.search-scope button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+.search-scope button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 预览范围查找命中高亮 */
+#preview mark.search-hit { background: rgba(255, 213, 0, 0.45); color: inherit; padding: 0 1px; border-radius: 2px; }
+#preview mark.search-hit.current { background: #ff9632; color: #fff; }
 .search-spacer { flex: 1; }
 /* ============ 双向跳转高亮 ============ */
 @keyframes mmd-flash { 0% { outline: 2px solid #f4b942; outline-offset: 2px; background: rgba(244,185,66,0.15); } 100% { outline: 2px solid transparent; background: transparent; } }
