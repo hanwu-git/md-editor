@@ -117,6 +117,34 @@
     });
   }
 
+  // 原生 HTML <img> 标签（Word 转 Markdown 常见）：marked 原样输出，相对路径
+  // 会被 WebView 解析到应用内部地址导致全部裂图。这里复用本地图片管线，
+  // 把非网络/data 的 src 换成 data URL。带内存缓存，避免每次输入后整篇重载。
+  const nativeImgCache = new Map(); // abs -> dataUrl
+  function loadNativeImages() {
+    if (!window.mdAPI || !window.mdAPI.readImageBytes) return;
+    preview.querySelectorAll('img').forEach((img) => {
+      if (img.closest('.md-img')) return;            // Markdown 语法图片由 data-mdimage 管线处理
+      const raw = img.getAttribute('src');
+      if (!raw || img.dataset.nativeDone) return;
+      const abs = resolveImagePath(raw);
+      if (!abs) return;
+      if (/^data:/i.test(abs) || /^https?:\/\//i.test(abs)) { img.dataset.nativeDone = '1'; return; }
+      img.dataset.nativeDone = '1';
+      const cached = nativeImgCache.get(abs);
+      if (cached) { img.src = cached; return; }
+      window.mdAPI.readImageBytes(abs).then((bytes) => {
+        if (Array.isArray(bytes) && bytes.length) {
+          const url = dataUrl(bytes, abs);
+          nativeImgCache.set(abs, url);
+          img.src = url;
+        } else {
+          img.alt = '(图片加载失败)';
+        }
+      }).catch(() => { img.alt = '(图片加载失败)'; });
+    });
+  }
+
   // ============ 渲染管线 ============
   let renderTimer = null;
 
@@ -124,28 +152,69 @@
   let srcLineStarts = [];   // 源码每行起始偏移
   let editorLineH = 24;      // 编辑区行高（px），由显示高度推算
   let jumpTimer = null;
-  // 参与映射的块级 token 类型（会各自在预览里产生一个顶层元素）
-  const SRC_BLOCK_TYPES = ['heading', 'paragraph', 'blockquote', 'hr', 'code', 'list', 'table'];
+  // 参与映射的块级 token 类型 → 其渲染出的顶层元素标签
+  const TOKEN_TAGS = {
+    heading: ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
+    paragraph: ['P'],
+    blockquote: ['BLOCKQUOTE'],
+    hr: ['HR'],
+    code: ['PRE'],
+    list: ['UL', 'OL'],
+    table: ['TABLE'],
+  };
+  const VOID_TAGS = new Set(['img', 'br', 'hr', 'input', 'meta', 'link', 'source', 'col', 'area', 'base', 'embed', 'track', 'wbr']);
+  // 会出现在词法结果里但不产生顶层元素的 token
+  const SKIP_TOKENS = new Set(['def']);
+
+  // 统计一段原生 HTML 会产生多少个顶层元素（与 preview.children 口径一致，注释不算）
+  function countTopLevelEls(html) {
+    let depth = 0, count = 0;
+    const re = /<!--[\s\S]*?-->|<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*)>/g;
+    let m;
+    while ((m = re.exec(html)) !== null) {
+      if (m[0].startsWith('<!--')) continue;
+      const tag = m[1].toLowerCase();
+      if (m[0][1] === '/') { depth = Math.max(0, depth - 1); continue; }
+      if (depth === 0) count++;
+      if (!VOID_TAGS.has(tag) && !/\/>$/.test(m[0])) depth++;
+    }
+    return count;
+  }
+
+  // 渲染后按源码顺序逐个对齐「预览顶层元素 ↔ token」，写入 data-src-pos。
+  // 不再要求"总数相等才标注"：html 块（Word 转出的裸 <img>/<table>）会产生不定数量的顶层元素，
+  // 总数口径稍有不符就会让整篇文档丧失跳转。改为顺序对齐，对齐中断时保留已验证的前缀映射。
+  function annotatePreview(src) {
+    const topEls = Array.from(preview.children);
+    const tokens = marked.lexer(src).filter((t) => t.type !== 'space');
+    let cursor = 0, ei = 0;
+    for (const tok of tokens) {
+      if (SKIP_TOKENS.has(tok.type)) continue;
+      let pos = src.indexOf(tok.raw, cursor);
+      if (pos < 0) pos = cursor;
+      if (tok.type === 'html') {
+        // 原生 HTML 块：产生的所有顶层元素同属这一段源码，标注同一位置
+        const n = countTopLevelEls(tok.raw);
+        if (n === 0) { cursor = pos + tok.raw.length; continue; }
+        if (ei + n > topEls.length) break;
+        for (let k = 0; k < n; k++) topEls[ei + k].dataset.srcPos = String(pos);
+        cursor = pos + tok.raw.length;
+        ei += n;
+        continue;
+      }
+      const tags = TOKEN_TAGS[tok.type];
+      const el = topEls[ei];
+      if (!tags || !el || !tags.includes(el.tagName)) break; // 结构异常：保留前缀，停止标注
+      el.dataset.srcPos = String(pos);
+      cursor = pos + tok.raw.length;
+      ei++;
+    }
+  }
 
   function buildLineStarts(s) {
     const arr = [0];
     for (let i = 0; i < s.length; i++) if (s[i] === '\n') arr.push(i + 1);
     return arr;
-  }
-
-  // 渲染后把「预览顶层元素 ↔ 其在源码中的起始偏移」写进 data-src-pos。
-  // 顺序一一对应才标注；数量不匹配则放弃（避免错位），保持安全降级。
-  function annotatePreview(src) {
-    const topEls = Array.from(preview.children);
-    const tokens = marked.lexer(src).filter((t) => SRC_BLOCK_TYPES.includes(t.type));
-    if (topEls.length !== tokens.length) return;
-    let cursor = 0;
-    for (let i = 0; i < tokens.length; i++) {
-      let pos = src.indexOf(tokens[i].raw, cursor);
-      if (pos < 0) pos = cursor;
-      cursor = pos + tokens[i].raw.length;
-      if (topEls[i]) topEls[i].dataset.srcPos = String(pos);
-    }
   }
 
   // 由偏移转 0 起行号
@@ -227,8 +296,9 @@
     // 兼容性增强：将"看起来像 Mermaid 图"的缩进代码块提升为围栏式 mermaid 以参与渲染
     promoteIndentedMermaid();
 
-    // 本地图片：读取相对/绝对路径的图片并展示
+    // 本地图片：读取相对/绝对路径的图片并展示（含原生 HTML <img> 标签）
     loadLocalImages();
+    loadNativeImages();
 
     // 代码高亮（非 mermaid）
     highlightCodeBlocks();
