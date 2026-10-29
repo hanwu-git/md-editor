@@ -63,6 +63,7 @@
       on('menu:save', 'save');
       on('menu:save_as', 'saveAs');
       T.event.listen('menu:open_recent', (x) => cb('openRecent', x.payload));
+      T.event.listen('menu:outline', () => cb('outline'));
       T.event.listen('menu:check_unsaved', (x) => cb('checkUnsaved', x.payload));
     },
     onRecentUpdated: (cb) => { if (T && T.event) T.event.listen('recent_updated', (x) => cb(x.payload)); },

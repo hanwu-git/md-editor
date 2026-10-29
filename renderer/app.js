@@ -360,6 +360,153 @@
       $('render-time').textContent = `渲染 ${ms}ms · 自动刷新`;
       $('status-render').textContent = `渲染 ${ms}ms`;
     });
+
+    // 浮动大纲：标题变化时重建
+    buildOutline();
+  }
+
+  // ============ 浮动大纲面板 ============
+  // 从源码提取 #~###### 标题（跳过围栏代码块），点击跳转到对应位置（编辑+预览联动）
+  let outlineItems = [];
+  let outlineSig = '';
+  let outlineActiveIdx = -1;
+
+  function extractOutline(src) {
+    const items = [];
+    const lines = src.split('\n');
+    let fence = false;
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^\s*(```|~~~)/.test(l)) { fence = !fence; continue; }
+      if (fence) continue;
+      const m = l.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+      if (m) items.push({ level: m[1].length, text: m[2].replace(/[`*_~]/g, '').trim(), line: i });
+    }
+    return items;
+  }
+
+  function buildOutline() {
+    const items = extractOutline(editor.value);
+    const sig = items.map((h) => h.level + '\u0001' + h.text).join('\u0002');
+    outlineItems = items;
+    if (sig === outlineSig) { updateOutlineActive(); return; }
+    outlineSig = sig;
+    const list = $('outline-list');
+    list.innerHTML = '';
+    if (!items.length) {
+      list.innerHTML = '<div class="outline-empty">本文档没有标题（以 # 开头的行）</div>';
+    } else {
+      const frag = document.createDocumentFragment();
+      items.forEach((h, idx) => {
+        const d = document.createElement('div');
+        d.className = 'outline-item lv' + h.level;
+        d.textContent = h.text;
+        d.title = h.text;
+        d.dataset.idx = idx;
+        frag.appendChild(d);
+      });
+      list.appendChild(frag);
+    }
+    updateOutlineActive();
+  }
+
+  // 大纲点击 → 精确跳转：编辑区按镜像测距定位（标题行落视口上方 1/4 处），预览跟随
+  function outlineJump(idx) {
+    const h = outlineItems[idx];
+    if (!h) return;
+    const line = h.line;
+    const start = srcLineStarts[line];
+    if (!(start >= 0)) return;
+    const next = line + 1 < srcLineStarts.length ? srcLineStarts[line + 1] : editor.value.length;
+    const end = Math.max(start, next - (next > start ? 1 : 0));
+    editor.focus();
+    editor.setSelectionRange(start, end);
+    const vpH = editor.clientHeight;
+    let top = -1;
+    try { top = caretVisualTop(editor, start); } catch (e) { top = -1; }
+    if (top >= 0) {
+      const padTop = parseFloat(getComputedStyle(editor).paddingTop) || 0;
+      const target = padTop + top - vpH * 0.25;
+      editor.scrollTop = Math.max(0, Math.min(Math.max(0, editor.scrollHeight - vpH), target));
+    } else {
+      const lineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH || 24;
+      editor.scrollTop = Math.max(0, line * lineH);
+    }
+    lineNums.scrollTop = editor.scrollTop;
+    updateCursorInfo();
+    jumpEditorToPreview();
+    scrollSyncLock = true;
+    requestAnimationFrame(() => { scrollSyncLock = false; });
+    updateOutlineActive();
+  }
+
+  // 按光标所在位置标记当前章节标题（最近的上级标题）
+  function updateOutlineActive() {
+    if (!outlineItems.length) return;
+    const line = srcLineStarts.length ? lineOf(editor.selectionStart) : 0;
+    let idx = -1;
+    for (let i = 0; i < outlineItems.length; i++) {
+      if (outlineItems[i].line <= line) idx = i; else break;
+    }
+    if (idx === outlineActiveIdx) return;
+    outlineActiveIdx = idx;
+    const list = $('outline-list');
+    list.querySelectorAll('.outline-item.active').forEach((el) => el.classList.remove('active'));
+    if (idx >= 0) {
+      const el = list.querySelector('.outline-item[data-idx="' + idx + '"]');
+      if (el) {
+        el.classList.add('active');
+        if (!$('outline-panel').classList.contains('hidden')) {
+          const r = el.getBoundingClientRect(), lr = list.getBoundingClientRect();
+          if (r.top < lr.top || r.bottom > lr.bottom) el.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }
+  }
+
+  function toggleOutline(force) {
+    const panel = $('outline-panel');
+    const show = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !show);
+    $('status-outline').classList.toggle('on', show);
+    try { localStorage.setItem('md-outline', show ? '1' : '0'); } catch (e) {}
+    if (show) buildOutline();
+  }
+
+  function initOutline() {
+    $('status-outline').addEventListener('click', () => toggleOutline());
+    $('outline-close').addEventListener('click', () => toggleOutline(false));
+    $('outline-list').addEventListener('click', (e) => {
+      const it = e.target.closest('.outline-item');
+      if (it) outlineJump(Number(it.dataset.idx));
+    });
+    // 面板拖动（按住标题栏）
+    const panel = $('outline-panel'), bar = $('outline-head');
+    let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.target.id === 'outline-close') return;
+      dragging = true;
+      try { bar.setPointerCapture(e.pointerId); } catch (err) {}
+      const r = panel.getBoundingClientRect();
+      ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+      panel.style.right = 'auto';
+      e.preventDefault();
+    });
+    bar.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const r = panel.getBoundingClientRect();
+      const x = Math.max(4, Math.min(window.innerWidth - r.width - 4, ox + e.clientX - sx));
+      const y = Math.max(4, Math.min(window.innerHeight - 40, oy + e.clientY - sy));
+      panel.style.left = x + 'px';
+      panel.style.top = y + 'px';
+    });
+    const stopDrag = () => { dragging = false; };
+    bar.addEventListener('pointerup', stopDrag);
+    bar.addEventListener('pointercancel', stopDrag);
+    // 恢复上次的显示状态
+    let show = false;
+    try { show = localStorage.getItem('md-outline') === '1'; } catch (e) {}
+    if (show) toggleOutline(true);
   }
 
   // Mermaid 图类型关键字（简称可识别）
@@ -1440,6 +1587,7 @@
       else if (cmd === 'save') saveFile();
       else if (cmd === 'saveAs') saveFileAs();
       else if (cmd === 'openRecent') openRecent(payload);
+      else if (cmd === 'outline') toggleOutline();
       else if (cmd === 'checkUnsaved') {
         // 主进程请求确认（关闭窗口/退出前）
         handleExitConfirmation(payload && payload.action);
@@ -1617,6 +1765,7 @@
     initDivider();
     initSearchbar();
     initEncodingPicker();
+    initOutline();
 
     // 初始示例内容（不含 mermaid，避免首启触发 3.4MB 懒加载）
     const sample = `# 欢迎使用 MD编辑器

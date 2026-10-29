@@ -141,8 +141,9 @@ fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
     let zoom_out = MenuItem::with_id(app, "view:zoom_out", "缩小", true, Some("Ctrl+-"))?;
     let sepv2 = PredefinedMenuItem::separator(app)?;
     let fullscreen = MenuItem::with_id(app, "view:fullscreen", "全屏", true, Some("F11"))?;
+    let outline = MenuItem::with_id(app, "view:outline", "大纲", true, Some("Ctrl+Shift+O"))?;
     let view_menu = Submenu::with_items(app, "视图", true, &[
-        &reload, &devtools, &sepv1, &zoom_reset, &zoom_in, &zoom_out, &sepv2, &fullscreen,
+        &reload, &devtools, &sepv1, &zoom_reset, &zoom_in, &zoom_out, &sepv2, &fullscreen, &outline,
     ])?;
 
     // 主题
@@ -176,6 +177,7 @@ fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
             "view:zoom_in" => { if let Some(w) = win.as_ref() { commands::view_zoom_in(w.clone()); } },
             "view:zoom_out" => { if let Some(w) = win.as_ref() { commands::view_zoom_out(w.clone()); } },
             "view:fullscreen" => toggle_fullscreen(win.as_ref()),
+            "view:outline" => emit(win.as_ref(), "menu:outline"),
             "theme:light" => emit_str(win.as_ref(), "theme_set", "light"),
             "theme:dark" => emit_str(win.as_ref(), "theme_set", "dark"),
             "help:about" => about_dialog(win.as_ref()),

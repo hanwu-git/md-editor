@@ -63,6 +63,10 @@
   </div>
 
   <!-- 查找 / 替换条 -->
+  <div id="outline-panel" class="hidden">
+    <div id="outline-head"><span>大纲</span><span id="outline-close" title="关闭">×</span></div>
+    <div id="outline-list"></div>
+  </div>
   <div id="searchbar" class="hidden">
     <div id="search-row">
       <input id="search-input" type="text" placeholder="查找…" />
@@ -92,6 +96,7 @@
     <span id="status-dirty">已保存</span>
     <span id="status-render"></span>
     <span id="sync-toggle" class="st-chip" title="左右滚动联动：点击开启/关闭（双击预览定位时会自动关闭）">联动 开</span>
+    <span id="status-outline" class="st-chip" title="文档大纲：点击显示/隐藏浮动大纲面板 (Ctrl+Shift+O)">大纲</span>
     <span id="zoom-controls" title="缩放">
       <span class="zoom-btn" id="zoom-out-btn">&#x2212;</span>
       <span id="zoom-level" title="点击恢复实际大小 (Ctrl+0)">100%</span>

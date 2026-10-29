@@ -121,6 +121,40 @@ button { cursor: pointer; }
   border-color: var(--accent);
 }
 
+/* ============ 浮动大纲面板 ============ */
+#outline-panel {
+  position: fixed; top: 48px; right: 16px; width: 268px; max-height: 72vh;
+  display: flex; flex-direction: column;
+  background: var(--bg-panel, var(--panel, #fff));
+  border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  z-index: 60; overflow: hidden;
+}
+#outline-panel.hidden { display: none; }
+#outline-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 10px; font-size: 12px; font-weight: 600;
+  cursor: move; user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+#outline-close { cursor: pointer; padding: 0 4px; font-size: 15px; line-height: 1; }
+#outline-close:hover { color: var(--accent); }
+#outline-list { overflow: auto; padding: 4px 0 6px; }
+.outline-item {
+  padding: 3px 10px; font-size: 12px; line-height: 1.6;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.outline-item:hover { background: var(--accent-soft); color: var(--accent); }
+.outline-item.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.outline-item.lv1 { font-weight: 600; padding-left: 10px; }
+.outline-item.lv2 { padding-left: 22px; }
+.outline-item.lv3 { padding-left: 34px; }
+.outline-item.lv4 { padding-left: 46px; }
+.outline-item.lv5 { padding-left: 58px; }
+.outline-item.lv6 { padding-left: 70px; }
+.outline-empty { padding: 12px 10px; color: var(--t3); font-size: 12px; text-align: center; }
+#status-outline.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+
 /* ============ 菜单栏 ============ */
 #menubar {
   height: 30px;
