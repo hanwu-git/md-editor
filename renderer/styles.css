@@ -139,7 +139,17 @@ button { cursor: pointer; }
 }
 #outline-close { cursor: pointer; padding: 0 4px; font-size: 15px; line-height: 1; }
 #outline-close:hover { color: var(--accent); }
-#outline-list { overflow: auto; padding: 4px 0 6px; }
+#outline-list { overflow: auto; padding: 4px 0 6px; flex: 1; }
+/* 大纲面板：8 方向内贴边手柄（overflow:hidden 下置于内侧） */
+.outline-rs { position: absolute; z-index: 6; touch-action: none; }
+.outline-rs[data-dir="n"]  { top: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.outline-rs[data-dir="s"]  { bottom: 0; left: 10px; right: 10px; height: 6px; cursor: ns-resize; }
+.outline-rs[data-dir="e"]  { right: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.outline-rs[data-dir="w"]  { left: 0; top: 10px; bottom: 10px; width: 6px; cursor: ew-resize; }
+.outline-rs[data-dir="ne"] { top: 0; right: 0; width: 13px; height: 13px; cursor: nesw-resize; }
+.outline-rs[data-dir="nw"] { top: 0; left: 0; width: 13px; height: 13px; cursor: nwse-resize; }
+.outline-rs[data-dir="se"] { bottom: 0; right: 0; width: 13px; height: 13px; cursor: nwse-resize; }
+.outline-rs[data-dir="sw"] { bottom: 0; left: 0; width: 13px; height: 13px; cursor: nesw-resize; }
 .outline-item {
   padding: 3px 10px; font-size: 12px; line-height: 1.6;
   cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

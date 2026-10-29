@@ -485,8 +485,21 @@
       const it = e.target.closest('.outline-item');
       if (it) outlineJump(Number(it.dataset.idx));
     });
-    // 面板拖动（按住标题栏）
+    // 面板拖动（按住标题栏）+ 边缘 8 方向拖拽调整大小；几何（位置+尺寸）持久化
     const panel = $('outline-panel'), bar = $('outline-head');
+    const MINW = 180, MINH = 120;
+    const applyGeom = (l, t, w, h) => {
+      panel.style.right = 'auto';
+      panel.style.left = Math.round(l) + 'px';
+      panel.style.top = Math.round(t) + 'px';
+      panel.style.width = Math.round(w) + 'px';
+      panel.style.height = Math.round(h) + 'px';
+      panel.style.maxHeight = 'none';
+    };
+    const saveGeom = () => {
+      const r = panel.getBoundingClientRect();
+      try { localStorage.setItem('md-outline-geom', JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height })); } catch (e) {}
+    };
     let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
     bar.addEventListener('pointerdown', (e) => {
       if (e.target.id === 'outline-close') return;
@@ -505,9 +518,52 @@
       panel.style.left = x + 'px';
       panel.style.top = y + 'px';
     });
-    const stopDrag = () => { dragging = false; };
+    const stopDrag = () => { if (dragging) { dragging = false; saveGeom(); } };
     bar.addEventListener('pointerup', stopDrag);
     bar.addEventListener('pointercancel', stopDrag);
+    // 边缘调整大小：8 个隐藏手柄（内贴边），pointerdown 后按方向改写几何
+    let rsDir = null, rsRect = null, rsStart = null;
+    ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((d) => {
+      const h = document.createElement('div');
+      h.className = 'outline-rs';
+      h.dataset.dir = d;
+      panel.appendChild(h);
+    });
+    panel.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest ? e.target.closest('.outline-rs') : null;
+      if (!h) return;
+      rsDir = h.dataset.dir;
+      const r = panel.getBoundingClientRect();
+      applyGeom(r.left, r.top, r.width, r.height);   // 归一化为 left/top 锚定，避免 right 定位下宽度方向跳变
+      rsRect = panel.getBoundingClientRect();
+      rsStart = { x: e.clientX, y: e.clientY };
+      try { panel.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    panel.addEventListener('pointermove', (e) => {
+      if (!rsDir) return;
+      const dx = e.clientX - rsStart.x, dy = e.clientY - rsStart.y;
+      let l = rsRect.left, t = rsRect.top, w = rsRect.width, hh = rsRect.height;
+      if (rsDir.indexOf('e') >= 0) w = Math.max(MINW, Math.min(window.innerWidth - 8 - l, rsRect.width + dx));
+      if (rsDir.indexOf('s') >= 0) hh = Math.max(MINH, Math.min(window.innerHeight - 8 - t, rsRect.height + dy));
+      if (rsDir.indexOf('w') >= 0) { const nl = Math.max(4, Math.min(l + w - MINW, l + dx)); w += l - nl; l = nl; }
+      if (rsDir.indexOf('n') >= 0) { const nt = Math.max(4, Math.min(t + hh - MINH, t + dy)); hh += t - nt; t = nt; }
+      applyGeom(l, t, w, hh);
+    });
+    const stopResize = () => { if (rsDir) { rsDir = null; saveGeom(); } };
+    panel.addEventListener('pointerup', stopResize);
+    panel.addEventListener('pointercancel', stopResize);
+    // 恢复上次的几何（位置+尺寸，含窗口变小后的边界钳制）
+    try {
+      const g = JSON.parse(localStorage.getItem('md-outline-geom') || 'null');
+      if (g && g.w >= MINW && g.h >= MINH) {
+        const w = Math.min(g.w, window.innerWidth - 8);
+        const h = Math.min(g.h, window.innerHeight - 8);
+        const x = Math.max(4, Math.min(g.x, window.innerWidth - w - 4));
+        const y = Math.max(4, Math.min(g.y, window.innerHeight - 40));
+        applyGeom(x, y, w, h);
+      }
+    } catch (e) {}
     // 恢复上次的显示状态
     let show = false;
     try { show = localStorage.getItem('md-outline') === '1'; } catch (e) {}
