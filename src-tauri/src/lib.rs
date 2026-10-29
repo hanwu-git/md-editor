@@ -162,7 +162,6 @@ fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
     ])?;
 
     // 视图
-    let reload = MenuItem::with_id(app, "view:reload", "重新加载", true, Some("CmdOrCtrl+R"))?;
     let devtools = MenuItem::with_id(app, "view:devtools", "开发者工具", true, Some("CmdOrCtrl+Shift+I"))?;
     let sepv1 = PredefinedMenuItem::separator(app)?;
     let zoom_reset = MenuItem::with_id(app, "view:zoom_reset", "实际大小", true, Some("CmdOrCtrl+0"))?;
@@ -171,8 +170,9 @@ fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
     let sepv2 = PredefinedMenuItem::separator(app)?;
     let fullscreen = MenuItem::with_id(app, "view:fullscreen", "全屏", true, Some("F11"))?;
     let outline = MenuItem::with_id(app, "view:outline", "大纲", true, Some("Ctrl+Shift+O"))?;
+    // 移除「重新加载」：location.reload() 会丢弃未保存的编辑内容，对日常使用有害无益
     let view_menu = Submenu::with_items(app, "视图", true, &[
-        &reload, &devtools, &sepv1, &zoom_reset, &zoom_in, &zoom_out, &sepv2, &fullscreen, &outline,
+        &devtools, &sepv1, &zoom_reset, &zoom_in, &zoom_out, &sepv2, &fullscreen, &outline,
     ])?;
 
     // 主题
@@ -200,7 +200,6 @@ fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
             "file:save" => emit(win.as_ref(), "menu:save"),
             "file:save_as" => emit(win.as_ref(), "menu:save_as"),
             "file:quit" => emit_json(win.as_ref(), "menu:check_unsaved"),
-            "view:reload" => eval(win.as_ref(), "location.reload()"),
             "view:devtools" => open_devtools(win.as_ref()),
             "view:zoom_reset" => { if let Some(w) = win.as_ref() { commands::view_reset_zoom(w.clone()); } },
             "view:zoom_in" => { if let Some(w) = win.as_ref() { commands::view_zoom_in(w.clone()); } },
@@ -226,9 +225,6 @@ fn emit_json(w: Option<&WebviewWindow>, event: &str) {
 }
 fn emit_str(w: Option<&WebviewWindow>, event: &str, val: &str) {
     if let Some(w) = w { let _ = w.emit(event, val); }
-}
-fn eval(w: Option<&WebviewWindow>, js: &str) {
-    if let Some(w) = w { let _ = w.eval(js); }
 }
 fn open_devtools(w: Option<&WebviewWindow>) {
     if let Some(w) = w { #[cfg(debug_assertions)] { let _ = w.open_devtools(); } }
