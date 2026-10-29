@@ -11,6 +11,21 @@ const APP_NAME: &str = "MD编辑器";
 /// 启动命令行待打开文件：前端初始化时通过 app_take_pending_file 取走（启动握手）
 pub static PENDING_FILE: Mutex<Option<String>> = Mutex::new(None);
 
+/// 启动性能打点：设置 MD_EDIT_BOOT_LOG=1 时写入 %TEMP%\mdedit-boot.log（毫秒时间戳）
+pub static BOOT_T0: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+pub fn boot_log(msg: &str) {
+    if std::env::var("MD_EDIT_BOOT_LOG").is_err() {
+        return;
+    }
+    let t = BOOT_T0.get_or_init(std::time::Instant::now).elapsed().as_millis();
+    let line = format!("[boot {:>6}ms] {}\r\n", t, msg);
+    let p = std::env::temp_dir().join("mdedit-boot.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&p) {
+        use std::io::Write;
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -30,7 +45,12 @@ pub fn run() {
                 let _ = win.set_focus();
             }
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default()
+            // 排除 VISIBLE：否则会把上次保存的"可见"状态在创建时恢复，
+            // 打穿 tauri.conf visible:false（窗口先于内容显示 → 白框/欢迎页闪现）
+            .with_state_flags(tauri_plugin_window_state::StateFlags::all()
+                & !tauri_plugin_window_state::StateFlags::VISIBLE)
+            .build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -41,6 +61,8 @@ pub fn run() {
             commands::app_get_recent,
             commands::app_get_version,
             commands::app_take_pending_file,
+            commands::app_boot_mark,
+            commands::app_show_window,
             commands::dialog_confirm_exit,
             commands::view_toggle_devtools,
             commands::view_zoom_in,
@@ -61,14 +83,21 @@ pub fn run() {
             commands::open_external,
         ])
         .setup(move |app| {
+            BOOT_T0.get_or_init(std::time::Instant::now);
             setup_window_menu(app.handle())?;
             command_line_open(app.handle());
-            // 兜底：若前端初始化失败未显示窗口，5 秒后强制显示，避免"永远白屏/无窗口"
+            // 兜底：显式隐藏（防插件/配置回归导致窗口先于内容显示），
+            // 且若前端初始化失败未显示窗口，5 秒后强制显示避免"永远无窗口"
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.hide();
+                boot_log("setup: 窗口已创建并强制隐藏");
+            }
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 if let Some(win) = handle.get_webview_window("main") {
                     if !win.is_visible().unwrap_or(true) {
+                        boot_log("fallback: 5s 兜底显示窗口（前端未调用 show）");
                         let _ = win.show();
                     }
                 }

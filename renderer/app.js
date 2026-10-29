@@ -1747,6 +1747,9 @@
 
   // ============ 初始化 ============
   function init() {
+    // 启动打点：MD_EDIT_BOOT_LOG=1 时上报到 %TEMP%\mdedit-boot.log
+    const mark = (m) => { try { if (mdAPI && mdAPI.bootMark) mdAPI.bootMark(m); } catch (e) {} };
+    mark('frontend: init 开始');
     // 主题恢复
     let saved = 'light';
     try { saved = localStorage.getItem('md-theme') || 'light'; } catch (e) {}
@@ -1797,6 +1800,7 @@ app.render();
     // 首帧渲染完成后显示窗口（tauri.conf 窗口 visible:false，消除启动白框），
     // 再执行"设为默认编辑器"询问（窗口隐藏时弹 confirm 会造成无窗口假死）
     const showNow = () => {
+      mark('frontend: showWindow（内容就绪，窗口即将可见）');
       try { if (mdAPI.showWindow) mdAPI.showWindow(); } catch (e) {}
       maybeAskSetDefaultAssoc();
     };
@@ -1818,8 +1822,10 @@ app.render();
     };
     if (mdAPI && mdAPI.takePendingFile) {
       mdAPI.takePendingFile().then(async (f) => {
+        mark(f ? ('frontend: takePendingFile -> ' + f) : 'frontend: takePendingFile -> 无待打开文件');
         if (f) {
-          try { await openRecent(f); } catch (e) { bootWelcome(); return; }
+          try { await openRecent(f); mark('frontend: openRecent 完成（内容已渲染）'); }
+          catch (e) { bootWelcome(); return; }
           showNow();
         } else {
           bootWelcome();

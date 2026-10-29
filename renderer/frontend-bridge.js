@@ -27,8 +27,11 @@
     getRecent:       () => call('app_get_recent'),
     // 启动握手：取走命令行待打开文件（无则 null）
     takePendingFile: () => call('app_take_pending_file'),
-    // 首帧渲染完成后显示窗口（tauri.conf 窗口 visible:false，消除启动白框）
-    showWindow:      () => { try { if (T && T.window) T.window.getCurrentWindow().show(); } catch (e) {} },
+    // 启动打点：上报前端关键阶段到 %TEMP%\mdedit-boot.log（仅 MD_EDIT_BOOT_LOG=1 时落盘）
+    bootMark:        (m) => call('app_boot_mark', { msg: m }).catch(() => {}),
+    // 首帧渲染完成后显示窗口（tauri.conf 窗口 visible:false，消除启动白框）；
+    // 走自定义命令：前端 window.show() 受 ACL core:window:allow-show 约束，曾静默失效
+    showWindow:      () => call('app_show_window'),
 
     toggleDevTools:  () => call('view_toggle_devtools'),
     zoomIn:          () => call('view_zoom_in'),

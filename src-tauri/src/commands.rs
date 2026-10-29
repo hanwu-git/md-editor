@@ -22,6 +22,28 @@ pub fn app_take_pending_file() -> Option<String> {
     crate::PENDING_FILE.lock().ok().and_then(|mut g| g.take())
 }
 
+/// 启动打点：前端关键阶段上报（MD_EDIT_BOOT_LOG=1 时落盘 %TEMP%\mdedit-boot.log）
+#[tauri::command]
+pub fn app_boot_mark(msg: String) {
+    crate::boot_log(&msg);
+}
+
+/// 显示主窗口：首帧渲染完成后由前端调用（自定义命令不受 ACL 限制，
+/// 替代前端 __TAURI__.window.show() —— 该路径受 core:window:allow-show 约束曾静默失效）
+#[tauri::command]
+pub fn app_show_window(window: tauri::WebviewWindow) {
+    crate::boot_log(&format!(
+        "app_show_window: before is_visible={:?}",
+        window.is_visible()
+    ));
+    let _ = window.show();
+    crate::boot_log(&format!(
+        "app_show_window: after is_visible={:?}",
+        window.is_visible()
+    ));
+    let _ = window.set_focus();
+}
+
 // ---------- 数据结构 ----------
 
 #[derive(Serialize, Deserialize)]
