@@ -309,15 +309,19 @@
     requestAnimationFrame(() => { scrollSyncLock = false; });
   }
 
-  // 左侧光标位置 → 右侧滚动到最近的预览块并高亮
-  function jumpEditorToPreview() {
+  // 左侧光标位置 → 右侧滚动到最近的预览块并高亮（toTop=true 时置顶，用于大纲跳转）
+  function jumpEditorToPreview(toTop) {
     if (!state.showPreview) return;
     const pos = editor.selectionStart;
     let best = null;
     for (const e of preview.querySelectorAll('[data-src-pos]')) {
       if (Number(e.dataset.srcPos) <= pos) best = e; else break;
     }
-    if (best) { flashEl(best); best.scrollIntoView({ block: 'nearest', behavior: 'auto' }); }
+    if (best) {
+      flashEl(best);
+      if (toTop) best.scrollIntoView({ block: 'start', behavior: 'auto' });
+      else best.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+    }
   }
 
   function scheduleJumpEditor() {
@@ -426,7 +430,8 @@
     try { top = caretVisualTop(editor, start); } catch (e) { top = -1; }
     if (top >= 0) {
       const padTop = parseFloat(getComputedStyle(editor).paddingTop) || 0;
-      const target = padTop + top - vpH * 0.25;
+      // 标题行置顶（贴合视口顶端，受滚动上限保护）
+      const target = padTop + top;
       editor.scrollTop = Math.max(0, Math.min(Math.max(0, editor.scrollHeight - vpH), target));
     } else {
       const lineH = parseFloat(getComputedStyle(editor).lineHeight) || editorLineH || 24;
@@ -434,7 +439,7 @@
     }
     lineNums.scrollTop = editor.scrollTop;
     updateCursorInfo();
-    jumpEditorToPreview();
+    jumpEditorToPreview(true);
     scrollSyncLock = true;
     requestAnimationFrame(() => { scrollSyncLock = false; });
     updateOutlineActive();
