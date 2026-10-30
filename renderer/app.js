@@ -474,8 +474,15 @@
     const show = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
     panel.classList.toggle('hidden', !show);
     $('status-outline').classList.toggle('on', show);
-    try { localStorage.setItem('md-outline', show ? '1' : '0'); } catch (e) {}
-    if (show) buildOutline();
+    try { localStorage.setItem('md-outline', show ? '1' : '0') } catch (e) {}
+    if (show) {
+      buildOutline();
+      // 面板打开时把当前章节滚动到可视区（隐藏期间错过的定位更新在此补偿）
+      requestAnimationFrame(() => {
+        const act = $('outline-list').querySelector('.outline-item.active');
+        if (act) act.scrollIntoView({ block: 'center' });
+      });
+    }
   }
 
   function initOutline() {
@@ -686,6 +693,8 @@
     const col = lastNL === -1 ? pos + 1 : pos - lastNL;
     const chars = text.length;
     $('status-cursor').textContent = `第 ${line} 行 · 第 ${col} 列 · ${chars.toLocaleString()} 字符`;
+    // 光标位置变化 → 同步大纲当前章节（面板展开时滚动定位当前项）
+    updateOutlineActive();
   }
 
   // ============ 查找 / 替换 ============
