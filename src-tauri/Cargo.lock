@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "md-editor"
-version = "6.0.21"
+version = "6.0.22"
 dependencies = [
  "arboard",
  "encoding_rs",

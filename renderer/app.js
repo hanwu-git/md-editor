@@ -1638,6 +1638,10 @@
     } else if (mod && e.key.toLowerCase() === 'h') {
       e.preventDefault();
       openSearch(true);
+    } else if (e.key === 'F11') {
+      // 全屏（原由不可见的原生菜单承载，6.0.22 起由前端接管）
+      e.preventDefault();
+      if (window.mdAPI) mdAPI.toggleFullscreen();
     }
   });
 
@@ -1677,6 +1681,8 @@
     window.addEventListener('keydown', (e) => {
       if (!e.ctrlKey || e.altKey) return;
       const k = e.key;
+      if (e.shiftKey && k.toLowerCase() === 'o') { e.preventDefault(); toggleOutline(); return; }
+      if (e.shiftKey && k.toLowerCase() === 'i') { e.preventDefault(); mdAPI.toggleDevTools(); return; }
       if (k === '=' || k === '+') { e.preventDefault(); zoomTo(zoomPct + 10, () => mdAPI.syncZoom(zoomPct)); }
       else if (k === '-') { e.preventDefault(); zoomTo(zoomPct - 10, () => mdAPI.syncZoom(zoomPct)); }
       else if (k === '0') { e.preventDefault(); zoomTo(100, () => mdAPI.syncZoom(100)); }

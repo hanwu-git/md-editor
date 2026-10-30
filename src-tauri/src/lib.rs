@@ -2,11 +2,8 @@ mod commands;
 mod fs_io;
 mod recent;
 
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, Manager};
 use std::sync::Mutex;
-
-const APP_NAME: &str = "MD编辑器";
 
 /// 启动命令行待打开文件：前端初始化时通过 app_take_pending_file 取走（启动握手）
 pub static PENDING_FILE: Mutex<Option<String>> = Mutex::new(None);
@@ -84,7 +81,6 @@ pub fn run() {
         ])
         .setup(move |app| {
             BOOT_T0.get_or_init(std::time::Instant::now);
-            setup_window_menu(app.handle())?;
             command_line_open(app.handle());
             // 兜底：显式隐藏（防插件/配置回归导致窗口先于内容显示），
             // 且若前端初始化失败未显示窗口，5 秒后强制显示避免"永远无窗口"
@@ -132,124 +128,9 @@ fn command_line_open(app: &AppHandle) {
     }
 }
 
-/// 构建应原生菜单（快捷键承载；点击转发事件到前端）
-fn setup_window_menu(app: &AppHandle) -> tauri::Result<()> {
-    // 文件
-    let new_item = MenuItem::with_id(app, "file:new", "新建", true, Some("CmdOrCtrl+N"))?;
-    let open_item = MenuItem::with_id(app, "file:open", "打开…", true, Some("CmdOrCtrl+O"))?;
-    let sep1 = PredefinedMenuItem::separator(app)?;
-    let save_item = MenuItem::with_id(app, "file:save", "保存", true, Some("CmdOrCtrl+S"))?;
-    let save_as_item = MenuItem::with_id(app, "file:save_as", "另存为…", true, Some("CmdOrCtrl+Shift+S"))?;
-    let sep2 = PredefinedMenuItem::separator(app)?;
-    let recent_item = MenuItem::with_id(app, "file:recent", "最近打开的文件", false, None::<&str>)?;
-    let sep3 = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "file:quit", "退出", true, Some("Alt+F4"))?;
-    let file_menu = Submenu::with_items(app, "文件", true, &[
-        &new_item, &open_item, &sep1, &save_item, &save_as_item,
-        &sep2, &recent_item, &sep3, &quit_item,
-    ])?;
-
-    // 编辑
-    let undo = PredefinedMenuItem::undo(app, Option::<&str>::None)?;
-    let redo = PredefinedMenuItem::redo(app, Option::<&str>::None)?;
-    let sep = PredefinedMenuItem::separator(app)?;
-    let cut = PredefinedMenuItem::cut(app, Option::<&str>::None)?;
-    let copy = PredefinedMenuItem::copy(app, Option::<&str>::None)?;
-    let paste = PredefinedMenuItem::paste(app, Option::<&str>::None)?;
-    let select_all = PredefinedMenuItem::select_all(app, Option::<&str>::None)?;
-    let edit_menu = Submenu::with_items(app, "编辑", true, &[
-        &undo, &redo, &sep, &cut, &copy, &paste, &select_all,
-    ])?;
-
-    // 视图
-    let devtools = MenuItem::with_id(app, "view:devtools", "开发者工具", true, Some("CmdOrCtrl+Shift+I"))?;
-    let sepv1 = PredefinedMenuItem::separator(app)?;
-    let zoom_reset = MenuItem::with_id(app, "view:zoom_reset", "实际大小", true, Some("CmdOrCtrl+0"))?;
-    let zoom_in = MenuItem::with_id(app, "view:zoom_in", "放大", true, Some("Ctrl+="))?;
-    let zoom_out = MenuItem::with_id(app, "view:zoom_out", "缩小", true, Some("Ctrl+-"))?;
-    let sepv2 = PredefinedMenuItem::separator(app)?;
-    let fullscreen = MenuItem::with_id(app, "view:fullscreen", "全屏", true, Some("F11"))?;
-    let outline = MenuItem::with_id(app, "view:outline", "大纲", true, Some("Ctrl+Shift+O"))?;
-    // 移除「重新加载」：location.reload() 会丢弃未保存的编辑内容，对日常使用有害无益
-    let view_menu = Submenu::with_items(app, "视图", true, &[
-        &devtools, &sepv1, &zoom_reset, &zoom_in, &zoom_out, &sepv2, &fullscreen, &outline,
-    ])?;
-
-    // 主题
-    let theme_light = MenuItem::with_id(app, "theme:light", "浅色", true, None::<&str>)?;
-    let theme_dark = MenuItem::with_id(app, "theme:dark", "深色", true, None::<&str>)?;
-    let theme_menu = Submenu::with_items(app, "主题", true, &[&theme_light, &theme_dark])?;
-
-    // 帮助
-    let about = MenuItem::with_id(app, "help:about", "关于 MD编辑器", true, None::<&str>)?;
-    let help_menu = Submenu::with_items(app, "帮助", true, &[&about])?;
-
-    let builder = Menu::new(app)?;
-    builder.append(&file_menu)?;
-    builder.append(&edit_menu)?;
-    builder.append(&view_menu)?;
-    builder.append(&theme_menu)?;
-    builder.append(&help_menu)?;
-    app.set_menu(builder)?;
-
-    app.on_menu_event(move |app, event| {
-        let win = app.get_webview_window("main");
-        match event.id().as_ref() {
-            "file:new" => emit(win.as_ref(), "menu:new"),
-            "file:open" => emit(win.as_ref(), "menu:open"),
-            "file:save" => emit(win.as_ref(), "menu:save"),
-            "file:save_as" => emit(win.as_ref(), "menu:save_as"),
-            "file:quit" => emit_json(win.as_ref(), "menu:check_unsaved"),
-            "view:devtools" => open_devtools(win.as_ref()),
-            "view:zoom_reset" => { if let Some(w) = win.as_ref() { commands::view_reset_zoom(w.clone()); } },
-            "view:zoom_in" => { if let Some(w) = win.as_ref() { commands::view_zoom_in(w.clone()); } },
-            "view:zoom_out" => { if let Some(w) = win.as_ref() { commands::view_zoom_out(w.clone()); } },
-            "view:fullscreen" => toggle_fullscreen(win.as_ref()),
-            "view:outline" => emit(win.as_ref(), "menu:outline"),
-            "theme:light" => emit_str(win.as_ref(), "theme_set", "light"),
-            "theme:dark" => emit_str(win.as_ref(), "theme_set", "dark"),
-            "help:about" => about_dialog(win.as_ref()),
-            _ => {}
-        }
-    });
-
-    Ok(())
-}
-
-// ---------- 菜单事件辅助 ----------
-fn emit(w: Option<&WebviewWindow>, event: &str) {
-    if let Some(w) = w { let _ = w.emit(event, ()); }
-}
-fn emit_json(w: Option<&WebviewWindow>, event: &str) {
-    if let Some(w) = w { let _ = w.emit(event, serde_json::json!({ "action": "quit" })); }
-}
-fn emit_str(w: Option<&WebviewWindow>, event: &str, val: &str) {
-    if let Some(w) = w { let _ = w.emit(event, val); }
-}
-fn open_devtools(w: Option<&WebviewWindow>) {
-    if let Some(w) = w { #[cfg(debug_assertions)] { let _ = w.open_devtools(); } }
-}
-fn toggle_fullscreen(w: Option<&WebviewWindow>) {
-    if let Some(w) = w {
-        let is = w.is_fullscreen().unwrap_or(false);
-        let _ = w.set_fullscreen(!is);
-    }
-}
-
-/// about 对话框
-fn about_dialog(window: Option<&WebviewWindow>) {
-    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
-    if let Some(w) = window {
-        let _ = w.dialog()
-            .message(format!(
-                "{APP_NAME} v{}\n\n本地 Markdown 编辑器：分屏实时预览、Mermaid 流程图、代码高亮、多编码支持、明暗主题。\n全程离线运行。\n\n由 hhwxxx 进行开发",
-                env!("CARGO_PKG_VERSION")
-            ))
-            .title(format!("关于 {APP_NAME}"))
-            .kind(MessageDialogKind::Info)
-            .blocking_show();
-    }
-}
+// ---------- 事件辅助 ----------
+// 原生菜单已整体移除（decorations:false 下不可见，网页菜单 buildMenubar 才是用户可见菜单，
+// 快捷键由前端 keydown 接管）。退出确认事件由 on_window_event 直接 emit。
 
 /// 解析命令行参数中的待打开文件路径（对应原 extractFilePathFromArgv）
 /// 注意：args[0] 是可执行文件自身，必须跳过。
