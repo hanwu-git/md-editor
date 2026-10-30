@@ -1355,7 +1355,7 @@
         { label: '同步滚动', checked: () => state.syncScroll, action: () => toggleSyncScroll() },
         { label: '自动折行', checked: () => state.wrap, action: () => toggleWrap() },
         { type: 'sep' },
-        { label: '重新加载', acc: 'Ctrl+R', action: () => location.reload() },
+        // 移除「重新加载」：location.reload() 会丢弃未保存的编辑内容（与 6.0.20 原生菜单保持一致）
         { label: '开发者工具', acc: 'Ctrl+Shift+I', action: () => { if (window.mdAPI) mdAPI.toggleDevTools(); } },
         { type: 'sep' },
         { title: '缩放' },
@@ -1363,7 +1363,8 @@
         { label: '放大', acc: 'Ctrl++', action: () => { if (window.mdAPI) zoomTo(zoomPct + 10, mdAPI.zoomIn); } },
         { label: '缩小', acc: 'Ctrl+-', action: () => { if (window.mdAPI) zoomTo(zoomPct - 10, mdAPI.zoomOut); } },
         { type: 'sep' },
-        { label: '全屏', acc: 'F11', action: () => { if (window.mdAPI) mdAPI.toggleFullscreen(); } }
+        { label: '全屏', acc: 'F11', action: () => { if (window.mdAPI) mdAPI.toggleFullscreen(); } },
+        { label: '大纲', acc: 'Ctrl+Shift+O', action: () => toggleOutline() }
       ],
       '主题': [
         { label: '浅色', action: () => applyTheme('light') },
