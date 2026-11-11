@@ -641,9 +641,21 @@
     let runError = null;
     try {
       const mmd = await window.__lazyLoader.ensureMermaid(() => {
-        mermaid.initialize({ startOnLoad: false, theme: state.theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' });
+        // fontFamily 显式对齐应用字体：mermaid 用它量宽，默认值（trebuchet ms）与中文实际渲染字体不一致会导致节点右侧文字被裁
+        mermaid.initialize({ startOnLoad: false, theme: state.theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict',
+          fontFamily: '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif' });
       });
-      await mmd.run({ nodes });
+      // #workspace 上的 CSS zoom ≠ 1 时量宽会整体失真（如 110% 时节点右侧裁掉 1~2 字符）。
+      // CSS zoom 是乘积关系，给 mermaid 容器临时设倒数（1/z）才能把有效缩放还原为 1:1 精确量宽；
+      // 渲染完成后恢复原值，SVG 随全局缩放（矢量无损）
+      const gz = zoomPct / 100;
+      const invZoom = gz === 1 ? null : String(1 / gz);
+      const savedZoom = nodes.map((n) => { const z = n.style.zoom; if (invZoom !== null) n.style.zoom = invZoom; return z; });
+      try {
+        await mmd.run({ nodes });
+      } finally {
+        nodes.forEach((n, i) => { n.style.zoom = savedZoom[i]; });
+      }
     } catch (e) {
       runError = e;
       console.error('Mermaid run error:', e);
@@ -934,7 +946,8 @@
     // mermaid 主题联动：仅已加载时同步（未加载 → 留给 ensureMermaid 首次加载回调）
     const m = (window.__lazyLoader && window.__lazyLoader.isMermaidLoaded()) ? window.mermaid : null;
     if (m && m.initialize) {
-      try { m.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict' }); } catch (e) {}
+      try { m.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default', securityLevel: 'strict',
+        fontFamily: '"Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif' }); } catch (e) {}
     }
     renderAll();
   }
