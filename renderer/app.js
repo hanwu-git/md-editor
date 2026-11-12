@@ -1546,6 +1546,7 @@
       state.previewOnly = false;
     }
     applyViewPrefs();
+    updatePreviewChipsUI();
     try { localStorage.setItem('md-show-preview', state.showPreview ? '1' : '0'); } catch (e) {}
   }
 
@@ -1556,7 +1557,22 @@
       state.showPreview = true;
     }
     applyViewPrefs();
+    updatePreviewChipsUI();
     try { localStorage.setItem('md-preview-only', state.previewOnly ? '1' : '0'); } catch (e) {}
+  }
+
+  // 状态栏预览/仅预览指示控件：开=高亮，与视图菜单共用状态
+  function updatePreviewChipsUI() {
+    const pv = $('preview-toggle');
+    const po = $('preview-only-toggle');
+    if (pv) {
+      pv.textContent = state.showPreview ? '预览 开' : '预览 关';
+      pv.classList.toggle('on', state.showPreview);
+    }
+    if (po) {
+      po.textContent = state.previewOnly ? '仅预览 开' : '仅预览 关';
+      po.classList.toggle('on', state.previewOnly);
+    }
   }
 
   // 联动开关统一入口：状态栏控件与视图菜单共用，保证两处显示一致
@@ -1688,6 +1704,11 @@
     $('zoom-level').addEventListener('click', () => zoomTo(100, mdAPI.resetZoom));
     // 状态栏联动指示控件：点击切换左右滚动联动
     $('sync-toggle').addEventListener('click', toggleSyncScroll);
+    // 状态栏预览/仅预览/保存控件：与视图菜单同一套切换函数，状态互相同步
+    $('preview-toggle').addEventListener('click', togglePreview);
+    $('preview-only-toggle').addEventListener('click', togglePreviewOnly);
+    $('save-toggle').addEventListener('click', () => saveFile());
+    updatePreviewChipsUI();
     // 缩放变化由后端推送校准（菜单/状态栏入口已预测设置，此处通常无视觉变化；原生菜单入口靠此补偿）
     mdAPI.onZoomChanged((pct) => {
       zoomPct = pct;
