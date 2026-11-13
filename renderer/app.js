@@ -1566,10 +1566,13 @@
   });
 
   async function pasteImageFromClipboard() {
-    const t = curTab();
-    if (!t || !t.filePath) {
-      alert('粘贴图片前请先保存文档（图片将存到文档所在目录的 image 子目录）');
-      return;
+    let t = curTab();
+    if (!t) return;
+    // 未保存文档：自动弹出另存为选择落点，随后图片自动存入所选目录的 image 子目录
+    if (!t.filePath) {
+      await saveFileAs();
+      t = curTab();
+      if (!t || !t.filePath) return; // 用户取消另存为，放弃粘贴
     }
     let rel = null, failed = false;
     try { rel = await mdAPI.saveClipboardImage(t.filePath); } catch (err) { failed = true; }
@@ -1581,6 +1584,8 @@
     updateLineNumbers();
     scheduleRender();
     updateCursorInfo();
+    // 图片已落盘，文档随之自动保存，引用即刻写入文件
+    try { await saveFile(); } catch (e) { /* 保存失败保持脏标记，用户可手动保存 */ }
   }
 
   // ============ 视图开关：预览显隐 + 双向滚动同步 ============
