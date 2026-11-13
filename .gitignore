@@ -9,3 +9,6 @@ node_modules/
 Thumbs.db
 .DS_Store
 *.log
+
+# ---- 构建产物不入库：exe / 安装包通过 GitHub Releases 发布 ----
+dist/
