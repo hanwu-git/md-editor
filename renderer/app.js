@@ -347,11 +347,13 @@
       const re = /!\[[^\]]*\]\(([^)\s]+)\)|<img[^>]+src=["']([^"']+)["']/gi;
       let m;
       while ((m = re.exec(editor.value)) !== null) {
-        const href = m[1] || m[2];
+        const href = (m[1] || m[2] || '').trim();
         if (!href) continue;
+        // 以源码里的原始引用为准：网络/data/绝对路径引用不随文档走，无需提示
+        if (/^(https?:|data:)/i.test(href)) continue;
+        if (/^[a-zA-Z]:[\\/]/.test(href) || href.startsWith('\\\\') || href.startsWith('/')) continue;
         const abs = resolveImagePath(href);
-        if (!abs || /^data:/i.test(abs) || /^https?:\/\//i.test(abs)) continue;
-        if (/^[a-zA-Z]:[\\/]/.test(abs) || abs.startsWith('\\\\')) continue; // 绝对路径引用无需随文档走
+        if (!abs) continue;
         const dir = abs.replace(/[\\/][^\\/]*$/, '');
         if (dir && !seen.has(dir)) { seen.add(dir); dirs.push(dir); }
       }
