@@ -120,6 +120,12 @@ button { cursor: pointer; }
   color: var(--accent); background: var(--accent-soft);
   border-color: var(--accent);
 }
+/* 图片目录提示：路径过长时截断，完整路径看悬停提示 */
+#status-imgdir {
+  max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: default; color: var(--accent); border-color: var(--accent);
+}
+#status-imgdir:hover { background: var(--accent-soft); }
 
 /* ============ 浮动大纲面板 ============ */
 #outline-panel {

@@ -335,6 +335,39 @@
     updateLineNumbers();
   }
 
+  // ============ 本地图片目录提示：文档引用相对路径图片时在状态栏给出位置提醒 ============
+  function updateImageDirHint() {
+    const chip = $('status-imgdir');
+    if (!chip) return;
+    const t = curTab();
+    const dirs = [];
+    if (t && t.filePath) {
+      const seen = new Set();
+      // Markdown ![alt](path) 与原生 <img src="path">，仅取相对路径引用
+      const re = /!\[[^\]]*\]\(([^)\s]+)\)|<img[^>]+src=["']([^"']+)["']/gi;
+      let m;
+      while ((m = re.exec(editor.value)) !== null) {
+        const href = m[1] || m[2];
+        if (!href) continue;
+        const abs = resolveImagePath(href);
+        if (!abs || /^data:/i.test(abs) || /^https?:\/\//i.test(abs)) continue;
+        if (/^[a-zA-Z]:[\\/]/.test(abs) || abs.startsWith('\\\\')) continue; // 绝对路径引用无需随文档走
+        const dir = abs.replace(/[\\/][^\\/]*$/, '');
+        if (dir && !seen.has(dir)) { seen.add(dir); dirs.push(dir); }
+      }
+    }
+    if (dirs.length === 0) {
+      chip.style.display = 'none';
+      chip.textContent = '';
+      chip.title = '';
+      return;
+    }
+    chip.style.display = '';
+    chip.textContent = '图片目录: ' + dirs[0] + (dirs.length > 1 ? ` 等${dirs.length}处` : '');
+    chip.title = '本文档引用了本地图片，位于：\n' + dirs.join('\n')
+      + '\n\n复制/移动本文档时请同步复制上述图片目录，否则图片将无法显示。';
+  }
+
   function renderAll() {
     const t0 = performance.now();
     const src = editor.value;
@@ -347,6 +380,7 @@
     }
     preview.innerHTML = html;
     annotatePreview(src); // 记录「预览块元素 ↔ 源码字符偏移」映射，供双向精确跳转
+    updateImageDirHint(); // 状态栏本地图片目录提示
 
     // 兼容性增强：将"看起来像 Mermaid 图"的缩进代码块提升为围栏式 mermaid 以参与渲染
     promoteIndentedMermaid();
