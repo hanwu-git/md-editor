@@ -1516,6 +1516,37 @@
     updateCursorInfo();
   }
 
+  // ============ 粘贴图片：剪贴板位图落盘到文档目录 image/ 并插入相对引用 ============
+  editor.addEventListener('paste', (e) => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type && /^image\//.test(it.type)) {
+        e.preventDefault();
+        pasteImageFromClipboard();
+        return;
+      }
+    }
+  });
+
+  async function pasteImageFromClipboard() {
+    const t = curTab();
+    if (!t || !t.filePath) {
+      alert('粘贴图片前请先保存文档（图片将存到文档所在目录的 image 子目录）');
+      return;
+    }
+    let rel = null, failed = false;
+    try { rel = await mdAPI.saveClipboardImage(t.filePath); } catch (err) { failed = true; }
+    if (failed) { alert('图片保存失败'); return; }
+    if (!rel) { alert('剪贴板中没有图片'); return; }
+    editor.setRangeText(`![](${rel})`, editor.selectionStart, editor.selectionEnd, 'end');
+    editor.focus();
+    markDirty(true);
+    updateLineNumbers();
+    scheduleRender();
+    updateCursorInfo();
+  }
+
   // ============ 视图开关：预览显隐 + 双向滚动同步 ============
   let scrollSyncLock = false;
 

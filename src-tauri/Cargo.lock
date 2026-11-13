@@ -2145,10 +2145,12 @@ dependencies = [
 
 [[package]]
 name = "md-editor"
-version = "6.0.26"
+version = "6.0.27"
 dependencies = [
  "arboard",
+ "chrono",
  "encoding_rs",
+ "image",
  "serde",
  "serde_json",
  "tauri",

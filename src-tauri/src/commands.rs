@@ -269,6 +269,43 @@ pub fn edit_read_clipboard() -> Option<String> {
         .and_then(|mut c| c.get_text().ok())
 }
 
+/// 粘贴图片落盘：读取剪贴板位图，保存 PNG 到文档所在目录的 image 子目录，
+/// 返回 Markdown 相对引用路径（image/img_时间戳.png）；剪贴板无图片时 Ok(None)
+#[tauri::command]
+pub fn save_clipboard_image(doc_path: String) -> Result<Option<String>, String> {
+    let mut clip = arboard::Clipboard::new()
+        .map_err(|e| format!("无法访问剪贴板: {}", e))?;
+    let img = match clip.get_image() {
+        Ok(i) => i,
+        Err(arboard::Error::ContentNotAvailable) => return Ok(None),
+        Err(e) => return Err(format!("读取剪贴板图片失败: {}", e)),
+    };
+
+    let dir = std::path::Path::new(&doc_path)
+        .parent()
+        .ok_or_else(|| "无法定位文档目录".to_string())?
+        .join("image");
+    fs::create_dir_all(&dir).map_err(|e| format!("创建 image 目录失败: {}", e))?;
+
+    // 时间戳文件名；同一秒内多次粘贴时追加序号避免覆盖
+    let base = chrono::Local::now().format("img_%Y%m%d_%H%M%S").to_string();
+    let mut path = dir.join(format!("{}.png", base));
+    let mut n = 1;
+    while path.exists() {
+        path = dir.join(format!("{}_{}.png", base, n));
+        n += 1;
+    }
+
+    // arboard 返回 RGBA；宽高异常或数据不完整时 from_raw 返回 None
+    let rgba = image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.into_owned())
+        .ok_or_else(|| "图片数据异常".to_string())?;
+    rgba.save_with_format(&path, image::ImageFormat::Png)
+        .map_err(|e| format!("保存 PNG 失败: {}", e))?;
+
+    let name = path.file_name().unwrap().to_string_lossy().to_string();
+    Ok(Some(format!("image/{}", name)))
+}
+
 // ---------- 窗口 ----------
 
 #[tauri::command]
