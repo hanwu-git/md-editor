@@ -120,12 +120,15 @@ button { cursor: pointer; }
   color: var(--accent); background: var(--accent-soft);
   border-color: var(--accent);
 }
-/* 图片目录提示：路径过长时截断，完整路径看悬停提示 */
+/* 图片目录提示：路径过长时截断，完整路径看悬停提示。
+   状态栏始终是深色底（--sb），accent 深蓝文字在上面不可读，改用琥珀色警示胶囊 */
 #status-imgdir {
-  max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: default; color: var(--accent); border-color: var(--accent);
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: default; color: #ffcf87;
+  background: rgba(240, 169, 34, 0.14);
+  border-color: rgba(240, 169, 34, 0.55);
 }
-#status-imgdir:hover { background: var(--accent-soft); }
+#status-imgdir:hover { background: rgba(240, 169, 34, 0.28); }
 
 /* ============ 浮动大纲面板 ============ */
 #outline-panel {

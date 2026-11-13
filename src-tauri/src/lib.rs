@@ -105,6 +105,7 @@ pub fn run() {
             // 关闭拦截：首次征求前端批量确认未保存；已批准后放行
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if commands::quit_approved() {
+                    let _ = window.hide(); // 已批准：窗口先消失，销毁延迟不被感知
                     return; // 已确认退出，放行
                 }
                 api.prevent_close();

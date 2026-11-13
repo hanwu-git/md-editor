@@ -325,10 +325,13 @@ pub fn win_close(window: WebviewWindow) { let _ = window.close(); }
 
 // ---------- 退出 ----------
 
-/// 前端确认退出（保存或不保存后调用）：置批准标记并真正关闭窗口
+/// 前端确认退出（保存或不保存后调用）：置批准标记并真正关闭窗口。
+/// 先隐藏窗口再销毁——窗口立即消失，销毁阶段偶发的延迟（大文档/大量图片时
+/// WebView 渲染进程回收较慢）不会被用户感知
 #[tauri::command]
 pub fn app_quit_approved(window: WebviewWindow) {
     set_quit_approved(true);
+    let _ = window.hide();
     let _ = window.close();
 }
 
