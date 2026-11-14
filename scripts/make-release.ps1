@@ -61,13 +61,15 @@ if (-not $Dist) { $Dist = Join-Path (git rev-parse --show-toplevel) 'dist' }
 $files = Get-ChildItem $Dist -File | Where-Object { $_.Name -like "*$Version*" }
 if (-not $files) { Write-Output "WARN: no dist files matching *$Version* in $Dist" }
 foreach ($f in $files) {
-  $old = $rel.assets | Where-Object { $_.name -eq $f.Name }
-  if ($old) {
-    Invoke-RestMethod -Uri "$api/releases/assets/$($old.id)" -Method Delete -Headers $auth | Out-Null
-    Write-Output "Replaced old asset: $($f.Name)"
+  # GitHub 会弄坏非 ASCII 资产名（MD编辑器→MD.），统一转成 ASCII 名上传
+  $safeName = $f.Name.Replace('MD编辑器', 'md-editor') -replace '[^\x21-\x7E]', '-'
+  $old = @($rel.assets | Where-Object { $_.name -eq $safeName -or $_.name.Contains($Version) })
+  foreach ($o in $old) {
+    Invoke-RestMethod -Uri "$api/releases/assets/$($o.id)" -Method Delete -Headers $auth | Out-Null
+    Write-Output "Replaced old asset: $($o.name)"
   }
-  $upUrl = ($rel.upload_url -replace '\{\?.*$','') + "?name=$([Uri]::EscapeDataString($f.Name))"
+  $upUrl = ($rel.upload_url -replace '\{\?.*$','') + "?name=$([Uri]::EscapeDataString($safeName))"
   Invoke-RestMethod -Uri $upUrl -Method Post -Headers $auth -InFile $f.FullName -ContentType 'application/octet-stream' | Out-Null
-  Write-Output ("Uploaded asset: {0} ({1} KB)" -f $f.Name, [math]::Round($f.Length/1KB))
+  Write-Output ("Uploaded asset: {0} ({1} KB)" -f $safeName, [math]::Round($f.Length/1KB))
 }
 Write-Output "Release URL: $($rel.html_url)"
