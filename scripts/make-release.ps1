@@ -1,4 +1,4 @@
-# Create/update a GitHub Release for the current version and upload dist assets.
+﻿# Create/update a GitHub Release for the current version and upload dist assets.
 # Token is fetched at runtime from git credential manager (never stored in the repo).
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\make-release.ps1 -Version 6.0.30 [-Dist <path-to-dist>]
 param(
