@@ -44,7 +44,7 @@ $payload = @{
 } | ConvertTo-Json
 $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
 
-# create or update release for the tag (idempotent)
+# create or update release for the tag (idempotent); re-GET afterwards for fresh asset list
 $existing = $null
 try { $existing = Invoke-RestMethod -Uri "$api/releases/tags/$tag" -Headers $auth } catch {}
 if ($existing) {
@@ -54,6 +54,7 @@ if ($existing) {
   $rel = Invoke-RestMethod -Uri "$api/releases" -Method Post -Headers $auth -Body $bytes -ContentType 'application/json'
   Write-Output "Created new release"
 }
+$rel = Invoke-RestMethod -Uri "$api/releases/$($rel.id)" -Headers $auth
 
 # upload dist assets matching the version (replace existing)
 if (-not $Dist) { $Dist = Join-Path (git rev-parse --show-toplevel) 'dist' }
