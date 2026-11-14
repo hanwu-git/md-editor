@@ -339,12 +339,12 @@ pub fn export_pdf(window: WebviewWindow, default_name: String) -> FileResult {
         None => return canceled_result(),
     };
 
-    let (tx, rx) = mpsc::channel::<(Option<String>, bool)>();
+    let (tx_done, rx_done) = mpsc::channel::<Result<(), String>>();
     let path2 = path.clone();
-    let tx_err = tx.clone();
     let sched = window.with_webview(move |wv| {
-        let send = move |e: Option<String>, ok: bool| { let _ = tx_err.send((e, ok)); };
-        let run = || -> Result<(), String> {
+        // PrintToPdf 是异步操作：完成回调持有 handler/settings 引用，必须在主线程
+        // 泵消息等待完成（wry 同款模式），让局部变量存活到回调结束，避免 use-after-free
+        let result = (|| -> Result<(), String> {
             unsafe {
                 let core = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
                 let core7: ICoreWebView2_7 = core.cast().map_err(|e| e.to_string())?;
@@ -358,26 +358,31 @@ pub fn export_pdf(window: WebviewWindow, default_name: String) -> FileResult {
                 settings.SetMarginLeft(0.4).map_err(|e| e.to_string())?;
                 settings.SetMarginRight(0.4).map_err(|e| e.to_string())?;
                 settings.SetShouldPrintBackgrounds(true.into()).map_err(|e| e.to_string())?;
+                let (tx, rx) = mpsc::channel::<(Option<String>, bool)>();
                 let handler = PrintToPdfCompletedHandler::create(Box::new(move |error_code, ok| {
                     let _ = tx.send((error_code.err().map(|e| e.to_string()), ok));
                     Ok(())
                 }));
                 core7.PrintToPdf(&HSTRING::from(&path2), &settings, &handler)
                     .map_err(|e| e.to_string())?;
+                match webview2_com::wait_with_pump(rx) {
+                    Ok((None, true)) => Ok(()),
+                    Ok((err, _)) => Err(err.unwrap_or_else(|| "PDF 生成失败".to_string())),
+                    Err(_) => Err("内部通信失败".to_string()),
+                }
             }
-            Ok(())
-        };
-        if let Err(e) = run() { send(Some(e), false); }
+        })();
+        let _ = tx_done.send(result);
     });
     if let Err(e) = sched {
         return FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some(e.to_string()) };
     }
-    match rx.recv_timeout(Duration::from_secs(60)) {
-        Ok((None, true)) => {
+    match rx_done.recv_timeout(Duration::from_secs(120)) {
+        Ok(Ok(())) => {
             let name = basename(&path);
             FileResult { canceled: false, saved: true, path: Some(path), fileName: Some(name), content: None, encoding: None, bom: None, error: None }
         }
-        Ok((err, _)) => FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some(err.unwrap_or_else(|| "PDF 生成失败".to_string())) },
+        Ok(Err(e)) => FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some(e) },
         Err(_) => FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some("导出超时".to_string()) },
     }
 }
