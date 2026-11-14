@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "md-editor"
-version = "6.0.30"
+version = "6.0.31"
 dependencies = [
  "arboard",
  "chrono",
@@ -2160,6 +2160,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
+ "webview2-com",
+ "windows-core 0.61.2",
  "winreg",
 ]
 

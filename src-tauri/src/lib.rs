@@ -69,6 +69,7 @@ pub fn run() {
             commands::view_toggle_fullscreen,
             commands::edit_read_clipboard,
             commands::save_clipboard_image,
+            commands::export_pdf,
             commands::window_set_title,
             commands::win_minimize,
             commands::win_maximize,

@@ -306,6 +306,82 @@ pub fn save_clipboard_image(doc_path: String) -> Result<Option<String>, String> 
     Ok(Some(format!("image/{}", name)))
 }
 
+// ---------- PDF 导出 ----------
+
+/// 导出预览区为 PDF：前端弹保存对话框选路径后，用 WebView2 原生 PrintToPdf 渲染。
+/// 渲染管线来自系统 WebView2 运行时（Edge 共用组件），不增加任何打包体积；
+/// 只导出预览区靠 styles.css 的 @media print 样式隔离。
+#[tauri::command]
+pub fn export_pdf(window: WebviewWindow, default_name: String) -> FileResult {
+    use tauri_plugin_dialog::DialogExt;
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2_7, ICoreWebView2Environment6,
+    };
+    use webview2_com::PrintToPdfCompletedHandler;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use windows_core::{Interface, HSTRING};
+
+    fn canceled_result() -> FileResult {
+        FileResult { canceled: true, saved: false, path: None, fileName: None, content: None, encoding: None, bom: None, error: None }
+    }
+
+    let name = if default_name.trim().is_empty() { "文档.pdf".to_string() } else { default_name };
+    let picked = window.dialog().file()
+        .add_filter("PDF 文档", &["pdf"])
+        .set_file_name(&name)
+        .blocking_save_file();
+    let path = match picked {
+        Some(p) => match p.into_path() {
+            Ok(pb) => pb.to_string_lossy().to_string(),
+            Err(_) => return canceled_result(),
+        },
+        None => return canceled_result(),
+    };
+
+    let (tx, rx) = mpsc::channel::<(Option<String>, bool)>();
+    let path2 = path.clone();
+    let tx_err = tx.clone();
+    let sched = window.with_webview(move |wv| {
+        let send = move |e: Option<String>, ok: bool| { let _ = tx_err.send((e, ok)); };
+        let run = || -> Result<(), String> {
+            unsafe {
+                let core = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
+                let core7: ICoreWebView2_7 = core.cast().map_err(|e| e.to_string())?;
+                // A4 纵向 + 0.4in 页边距，打印背景色（代码块/表格底纹保留）
+                let env6: ICoreWebView2Environment6 = wv.environment().cast().map_err(|e| e.to_string())?;
+                let settings = env6.CreatePrintSettings().map_err(|e| e.to_string())?;
+                settings.SetPageWidth(8.27).map_err(|e| e.to_string())?;
+                settings.SetPageHeight(11.69).map_err(|e| e.to_string())?;
+                settings.SetMarginTop(0.4).map_err(|e| e.to_string())?;
+                settings.SetMarginBottom(0.4).map_err(|e| e.to_string())?;
+                settings.SetMarginLeft(0.4).map_err(|e| e.to_string())?;
+                settings.SetMarginRight(0.4).map_err(|e| e.to_string())?;
+                settings.SetShouldPrintBackgrounds(true.into()).map_err(|e| e.to_string())?;
+                let handler = PrintToPdfCompletedHandler::create(Box::new(move |error_code, ok| {
+                    let _ = tx.send((error_code.err().map(|e| e.to_string()), ok));
+                    Ok(())
+                }));
+                core7.PrintToPdf(&HSTRING::from(&path2), &settings, &handler)
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        };
+        if let Err(e) = run() { send(Some(e), false); }
+    });
+    if let Err(e) = sched {
+        return FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some(e.to_string()) };
+    }
+    match rx.recv_timeout(Duration::from_secs(60)) {
+        Ok((None, true)) => {
+            let name = basename(&path);
+            FileResult { canceled: false, saved: true, path: Some(path), fileName: Some(name), content: None, encoding: None, bom: None, error: None }
+        }
+        Ok((err, _)) => FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some(err.unwrap_or_else(|| "PDF 生成失败".to_string())) },
+        Err(_) => FileResult { canceled: false, saved: false, path: Some(path), fileName: None, content: None, encoding: None, bom: None, error: Some("导出超时".to_string()) },
+    }
+}
+
 // ---------- 窗口 ----------
 
 #[tauri::command]

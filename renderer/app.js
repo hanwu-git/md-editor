@@ -1311,6 +1311,22 @@
     }
   }
 
+  // 导出预览区为 PDF：弹保存对话框选路径，WebView2 原生 PrintToPdf 渲染（A4，含背景色）
+  async function exportPdf() {
+    if (!window.mdAPI || !mdAPI.exportPdf) return;
+    const t = curTab();
+    const base = ((t && t.filePath) ? state.fileName : (state.fileName || '未命名')).replace(/\.md$/i, '');
+    try {
+      const r = await mdAPI.exportPdf(base + '.pdf');
+      if (!r || r.canceled) return;
+      if (r.error) { alert('导出 PDF 失败：' + r.error); return; }
+      if (!r.saved) { alert('导出 PDF 失败'); return; }
+      alert('已导出 PDF：\n' + r.path);
+    } catch (e) {
+      alert('导出 PDF 失败（命令异常）：' + (e && e.message ? e.message : e));
+    }
+  }
+
   function markDirty(d) {
     state.dirty = d;
     const t = curTab();
@@ -1390,6 +1406,7 @@
         { type: 'sep' },
         { label: '保存', acc: 'Ctrl+S', action: () => saveFile() },
         { label: '另存为…', acc: 'Ctrl+Shift+S', action: () => saveFileAs() },
+        { label: '导出 PDF…', acc: 'Ctrl+P', action: () => exportPdf() },
         { type: 'sep' },
         { label: '最近打开的文件', sub: true, recent: true },
         { type: 'sep' },
@@ -1748,6 +1765,10 @@
     } else if (mod && e.key.toLowerCase() === 'h') {
       e.preventDefault();
       openSearch(true);
+    } else if (mod && e.key.toLowerCase() === 'p') {
+      // 导出 PDF（浏览器打印习惯键位）
+      e.preventDefault();
+      exportPdf();
     } else if (e.key === 'F11') {
       // 全屏（原由不可见的原生菜单承载，6.0.22 起由前端接管）
       e.preventDefault();

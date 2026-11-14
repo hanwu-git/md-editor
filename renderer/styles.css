@@ -634,3 +634,15 @@ button { cursor: pointer; }
 @keyframes mmd-flash { 0% { outline: 2px solid #f4b942; outline-offset: 2px; background: rgba(244,185,66,0.15); } 100% { outline: 2px solid transparent; background: transparent; } }
 #preview .flash, #editor:focus + #preview .flash { animation: mmd-flash 1.1s ease; }
 
+/* ============ 导出 PDF（WebView2 PrintToPdf 走 @media print 渲染） ============ */
+/* 隐藏应用外壳，只留预览内容；重置全局缩放与滚动裁剪，让整篇文档铺满分页 */
+@media print {
+  #titlebar, #menubar, #tabbar, #statusbar, #outline-panel,
+  #left-pane, #divider, .pane-header, .menu-popup, #search-panel { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; }
+  body { display: block !important; }
+  #workspace { display: block !important; height: auto !important; zoom: 1 !important; }
+  #right-pane { display: block !important; width: auto !important; flex: none !important; height: auto !important; }
+  #preview { display: block !important; overflow: visible !important; height: auto !important; background: #fff !important; }
+}
+

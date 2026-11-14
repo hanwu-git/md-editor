@@ -43,6 +43,7 @@
     readClipboard:   () => call('edit_read_clipboard'),
     // 粘贴图片：剪贴板位图存到文档目录 image/ 下，返回相对引用路径（无图片返回 null）
     saveClipboardImage: (docPath) => call('save_clipboard_image', { docPath }),
+  exportPdf: (defaultName) => call('export_pdf', { defaultName }),
     setTitle:        (title) => call('window_set_title', { title }),
     minimize:        () => call('win_minimize'),
     maximize:        () => call('win_maximize'),
