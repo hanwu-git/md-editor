@@ -311,7 +311,7 @@
 
   // 左侧光标位置 → 右侧滚动到最近的预览块并高亮（toTop=true 时置顶，用于大纲跳转）
   function jumpEditorToPreview(toTop) {
-    if (!state.showPreview) return;
+    if (!previewVisible()) return;
     const pos = editor.selectionStart;
     let best = null;
     for (const e of preview.querySelectorAll('[data-src-pos]')) {
@@ -1103,6 +1103,8 @@
     editor.value = t.content;
     updateLineNumbers();
     renderAll();
+    applyViewPrefs();
+    updatePreviewChipsUI();
     updateCursorInfo();
     // 直接恢复 dirty 标志 & 上报，不经过 markDirty(避免重复 updateTitleBar）
     if (window.mdAPI) mdAPI.setDirty(t.dirty);
@@ -1304,6 +1306,8 @@
           if (window.mdAPI) mdAPI.setDirty(false);
           updateTitleBar();
         }
+        applyViewPrefs();
+        updatePreviewChipsUI();
         renderTabs();
       }
     } catch (e) {
@@ -1616,9 +1620,18 @@
     to.scrollTop = (from.scrollTop / fMax) * tMax;
   }
 
+  // txt 文档没有 Markdown 预览：打开/切换到 txt 时自动只显示编辑框，
+  // 不改动用户的 showPreview 偏好（切回 md 恢复原状）
+  function isTxtFile() {
+    const t = curTab();
+    return !!(t && t.filePath && /\.txt$/i.test(t.filePath));
+  }
+  function previewVisible() { return state.showPreview && !isTxtFile(); }
+
   function applyViewPrefs() {
-    $('workspace').classList.toggle('no-preview', !state.showPreview);
-    $('workspace').classList.toggle('preview-only', state.previewOnly);
+    const txt = isTxtFile();
+    $('workspace').classList.toggle('no-preview', !previewVisible());
+    $('workspace').classList.toggle('preview-only', !txt && state.previewOnly);
     applyWrap();
   }
 
@@ -1629,6 +1642,7 @@
   }
 
   function togglePreview() {
+    if (isTxtFile()) { alert('txt 文档为纯文本，不提供预览窗口'); return; }
     state.showPreview = !state.showPreview;
     // 关闭预览时自动退出仅预览模式
     if (!state.showPreview && state.previewOnly) {
@@ -1640,6 +1654,7 @@
   }
 
   function togglePreviewOnly() {
+    if (isTxtFile()) { alert('txt 文档为纯文本，不提供预览窗口'); return; }
     state.previewOnly = !state.previewOnly;
     // 开启仅预览时确保预览窗口是显示的
     if (state.previewOnly && !state.showPreview) {
@@ -1654,13 +1669,14 @@
   function updatePreviewChipsUI() {
     const pv = $('preview-toggle');
     const po = $('preview-only-toggle');
+    const txt = isTxtFile();
     if (pv) {
-      pv.textContent = state.showPreview ? '预览 开' : '预览 关';
-      pv.classList.toggle('on', state.showPreview);
+      pv.textContent = txt ? '预览 无' : (state.showPreview ? '预览 开' : '预览 关');
+      pv.classList.toggle('on', !txt && state.showPreview);
     }
     if (po) {
-      po.textContent = state.previewOnly ? '仅预览 开' : '仅预览 关';
-      po.classList.toggle('on', state.previewOnly);
+      po.textContent = txt ? '仅预览 无' : (state.previewOnly ? '仅预览 开' : '仅预览 关');
+      po.classList.toggle('on', !txt && state.previewOnly);
     }
   }
 
