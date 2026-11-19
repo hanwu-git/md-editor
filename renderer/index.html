@@ -70,19 +70,19 @@
   <div id="searchbar" class="hidden">
     <div id="search-row">
       <input id="search-input" type="text" placeholder="查找…" />
+      <button id="search-find" title="查找下一个 (Enter)">查找</button>
+      <button id="search-prev" title="上一个 (Shift+Enter)">↑</button>
+      <button id="search-next" title="下一个 (Enter)">↓</button>
+      <span id="search-count"></span>
+      <button id="search-case" title="区分大小写">Aa</button>
       <span class="search-scope" title="搜索范围">
         <button id="scope-src" class="active">原文</button>
         <button id="scope-preview">预览</button>
       </span>
-      <button id="search-case" title="区分大小写">Aa</button>
-      <span id="search-count"></span>
-      <button id="search-prev" title="上一个 (Shift+Enter)">↑</button>
-      <button id="search-next" title="下一个 (Enter)">↓</button>
       <button id="search-close" title="关闭 (Esc)">✕</button>
     </div>
     <div id="replace-row" class="hidden">
       <input id="replace-input" type="text" placeholder="替换为…" />
-      <span class="search-spacer"></span>
       <button id="replace-one">替换</button>
       <button id="replace-all">全部替换</button>
     </div>

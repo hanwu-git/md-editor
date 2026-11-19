@@ -964,6 +964,7 @@
     });
     $('search-next').addEventListener('click', () => searchNext());
     $('search-prev').addEventListener('click', () => searchPrev());
+    $('search-find').addEventListener('click', () => { searchNext(); $('search-input').focus(); });
     $('replace-one').addEventListener('click', () => replaceOne());
     $('replace-all').addEventListener('click', () => replaceAll());
     $('search-close').addEventListener('click', () => closeSearch());
