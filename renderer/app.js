@@ -920,6 +920,7 @@
     updateMatches();           // 重新计算匹配（位置偏移）
     updateLineNumbers();
     scheduleRender();
+    showSearchMsg('已替换 1 处');
   }
 
   function replaceAll() {
@@ -930,17 +931,34 @@
     const t = search.caseSensitive ? search.term : search.term.toLowerCase();
     const lower = search.caseSensitive ? text : text.toLowerCase();
     const parts = [];
-    let last = 0, idx = 0;
+    let last = 0, idx = 0, count = 0;
     while ((idx = lower.indexOf(t, last)) !== -1) {
       parts.push(text.substring(last, idx) + rep);
       last = idx + search.term.length;
+      count++;
     }
+    if (!count) { showSearchMsg('没有可替换的内容'); return; }
     parts.push(text.substring(last));
     editor.value = parts.join('');
     markDirty(true);
     updateMatches();
     updateLineNumbers();
     scheduleRender();
+    showSearchMsg(`已全部替换 ${count} 处`);
+  }
+
+  // 替换结果提示：短暂显示后淡出（避免连点替换时提示重叠）
+  let searchMsgTimer = null;
+  function showSearchMsg(text) {
+    const el = $('search-msg');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.add('on');
+    if (searchMsgTimer) clearTimeout(searchMsgTimer);
+    searchMsgTimer = setTimeout(() => {
+      el.classList.remove('on');
+      el.textContent = '';
+    }, 1800);
   }
 
   function initSearchbar() {
