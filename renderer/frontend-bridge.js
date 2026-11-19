@@ -21,7 +21,7 @@
     openFile:        () => call('dialog_open_file'),
     openRecent:      (filePath) => call('dialog_open_recent', { path: filePath }),
     saveFile:        (payload) => call('dialog_save_file', { args: { content: payload.content, encoding: payload.encoding, bom: payload.bom, path: payload.path || null } }),
-    saveFileAs:      (payload) => call('dialog_save_file_as', { args: { content: payload.content, encoding: payload.encoding, bom: payload.bom } }),
+    saveFileAs:      (payload) => call('dialog_save_file_as', { args: { content: payload.content, encoding: payload.encoding, bom: payload.bom, filename: payload.defaultName || null } }),
     confirmExit:     (fileName) => call('dialog_confirm_exit', { fileName: fileName || '' }),
     getVersion:      () => call('app_get_version'),
     getRecent:       () => call('app_get_recent'),

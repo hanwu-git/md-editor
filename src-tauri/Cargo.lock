@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "md-editor"
-version = "6.0.33"
+version = "6.0.34"
 dependencies = [
  "arboard",
  "chrono",

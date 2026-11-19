@@ -82,6 +82,9 @@ pub struct SaveArgs {
     pub encoding: String,
     #[serde(default)]
     pub bom: bool,
+    // 另存为对话框的默认文件名（前端传当前文档名）
+    #[serde(default)]
+    pub filename: Option<String>,
 }
 fn default_encoding() -> String { "UTF-8".to_string() }
 
@@ -170,10 +173,13 @@ pub fn dialog_save_file(app: AppHandle, window: WebviewWindow, args: SaveArgs) -
 #[tauri::command]
 pub fn dialog_save_file_as(app: AppHandle, window: WebviewWindow, args: SaveArgs) -> FileResult {
     use tauri_plugin_dialog::DialogExt;
+    let default_name = args.filename.clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "未命名.md".to_string());
     let picked = window.dialog().file()
         .add_filter("Markdown/文本", &["md", "markdown", "mdown", "txt"])
         .add_filter("所有文件", &["*"])
-        .set_file_name("未命名.md")
+        .set_file_name(default_name)
         .blocking_save_file();
     match picked {
         Some(path) => {

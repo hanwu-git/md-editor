@@ -825,8 +825,10 @@
 
   function updateMatches() {
     search.matches = search.scope === 'preview' ? getPreviewMatches(search.term) : getMatches(search.term);
-    search.current = search.matches.length ? 0 : -1;
-    renderSearch();
+    // 不在输入过程中自动跳到第一处：中文输入法拼写阶段每次都会触发 input，
+    // 若此时 focus() 编辑区会把光标从查找框抢走。跳转由 Enter / ↑↓ / 「查找」按钮触发。
+    search.current = -1;
+    if (search.scope === 'preview') renderSearch(); // 预览高亮可即时显示（不涉及焦点）
     updateSearchCount();
   }
 
@@ -850,9 +852,13 @@
   }
 
   function updateSearchCount() {
-    $('search-count').textContent = search.matches.length
-      ? `${search.current + 1}/${search.matches.length}`
-      : (search.term ? '无结果' : '');
+    if (!search.matches.length) {
+      $('search-count').textContent = search.term ? '无结果' : '';
+      return;
+    }
+    const n = search.matches.length;
+    // 尚未跳转时只显示总数，避免出现 0/3 这种误导性计数
+    $('search-count').textContent = search.current >= 0 ? `${search.current + 1}/${n}` : `共 ${n} 处`;
   }
 
   function openSearch(showReplace) {
@@ -894,15 +900,18 @@
 
   function searchPrev() {
     if (!search.matches.length) return;
-    search.current = (search.current - 1 + search.matches.length) % search.matches.length;
+    search.current = search.current < 0
+      ? search.matches.length - 1
+      : (search.current - 1 + search.matches.length) % search.matches.length;
     renderSearch();
     updateSearchCount();
   }
 
   function replaceOne() {
     if (search.scope === 'preview') return; // 替换仅支持原文范围
-    if (!search.term || search.current < 0) return;
-    const [s, e] = search.matches[search.current];
+    if (!search.term || !search.matches.length) return;
+    const ci = search.current >= 0 ? search.current : 0;
+    const [s, e] = search.matches[ci];
     const rep = $('replace-input').value;
     const val = editor.value;
     editor.value = val.substring(0, s) + rep + val.substring(e);
@@ -945,6 +954,7 @@
       $('search-input').focus();
     });
     $('search-input').addEventListener('keydown', (e) => {
+      if (e.isComposing) return; // 输入法确认候选词：不要当成导航键
       if (e.key === 'Enter') {
         e.preventDefault();
         e.shiftKey ? searchPrev() : searchNext();
@@ -954,6 +964,7 @@
       }
     });
     $('replace-input').addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
       if (e.key === 'Enter') {
         e.preventDefault();
         replaceOne();
@@ -964,11 +975,21 @@
     });
     $('search-next').addEventListener('click', () => searchNext());
     $('search-prev').addEventListener('click', () => searchPrev());
-    $('search-find').addEventListener('click', () => { searchNext(); $('search-input').focus(); });
+    $('search-find').addEventListener('click', () => searchNext());
     $('replace-one').addEventListener('click', () => replaceOne());
     $('replace-all').addEventListener('click', () => replaceAll());
     $('search-close').addEventListener('click', () => closeSearch());
+    // 输入法组合输入期间跳过匹配计算：composition 中每个拼音字母都会触发 input，
+    // 既无意义又会让高亮/计数频繁抖动；确认选词后（compositionend）再统一计算
+    let composing = false;
+    $('search-input').addEventListener('compositionstart', () => { composing = true; });
+    $('search-input').addEventListener('compositionend', () => {
+      composing = false;
+      search.term = $('search-input').value;
+      updateMatches();
+    });
     $('search-input').addEventListener('input', () => {
+      if (composing) return;
       search.term = $('search-input').value;
       updateMatches();
     });
@@ -1290,9 +1311,13 @@
   async function saveFileAs() {
     const t = curTab();
     if (!t) return;
+    // 对话框默认填当前文档名（用户仍可在对话框里改名）；未命名文档给 未命名.md
+    const name = (t.fileName && t.fileName !== '未命名')
+      ? (/\.\w+$/.test(t.fileName) ? t.fileName : t.fileName + '.md')
+      : '未命名.md';
     // 另存为按当前状态栏所选编码（含 BOM）写出，可用于转码保存
     try {
-      const res = await mdAPI.saveFileAs({ content: t.content, encoding: t.encoding, bom: t.bom });
+      const res = await mdAPI.saveFileAs({ content: t.content, encoding: t.encoding, bom: t.bom, defaultName: name });
       if (!res || res.canceled) return;
       if (res.error) { alert('另存为失败：' + res.error); return; }
       if (res.saved && res.path) {
@@ -1786,6 +1811,9 @@
       // 导出 PDF（浏览器打印习惯键位）
       e.preventDefault();
       exportPdf();
+    } else if (mod && e.key.toLowerCase() === 'r') {
+      // 禁用 WebView2 默认刷新（Ctrl+R / Ctrl+Shift+R），避免误按丢失未保存内容
+      e.preventDefault();
     } else if (e.key === 'F11') {
       // 全屏（原由不可见的原生菜单承载，6.0.22 起由前端接管）
       e.preventDefault();
