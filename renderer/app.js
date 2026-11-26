@@ -1954,6 +1954,12 @@
       const rel = await res.json();
       const tag = String((rel && rel.tag_name) || '').replace(/^v/i, '');
       if (!tag || !isNewerVer(tag, state.version)) return;
+      // 记录本次检测到的最新版本号和检测时间（持久化，便于追溯更新状态）
+      try {
+        localStorage.setItem('md-latest-version', tag);
+        localStorage.setItem('md-latest-check', String(Date.now()));
+      } catch (_) {}
+      // 用户已忽略该版本 → 同版本号不再提示（更高版本仍会提示）
       try { if (localStorage.getItem('md-skip-update') === tag) return; } catch (_) {}
       showUpdateBar(tag, rel.html_url || 'https://github.com/hanwu-git/md-editor/releases/latest');
     } catch (_) {
