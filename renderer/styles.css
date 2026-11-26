@@ -486,6 +486,54 @@ button { cursor: pointer; }
 .menu-popup-up { min-width: 150px; }
 #status-dirty.dirty { color: #f5c542; }
 
+/* ============ 新版本提示条 ============ */
+#update-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  z-index: 300;
+  font-size: 12.5px;
+  color: var(--t1);
+  animation: update-in 0.25s ease;
+}
+#update-bar.hidden { display: none; }
+@keyframes update-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+#update-bar button {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--t1);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+#update-bar button:hover { border-color: var(--t3); }
+#update-bar #update-go {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+#update-bar #update-close {
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--t3);
+}
+
 /* ============ 确认浮层 ============ */
 #save-confirm-overlay {
   position: absolute;

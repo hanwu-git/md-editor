@@ -1891,6 +1891,9 @@
       updateTitleBar();
     });
 
+    // 自动检查更新：延迟 10 秒，完全不影响启动；网络不通时静默失败
+    setTimeout(() => { checkUpdate(); }, 10000);
+
     // 最近文件：启动时从主进程拉取持久化列表，此后由主进程推送保持同步
     mdAPI.getRecent().then((files) => {
       if (Array.isArray(files)) state.recent = files;
@@ -1903,6 +1906,59 @@
     mdAPI.onOpenFile((filePath) => {
       openRecent(filePath);
     });
+  }
+
+  // ============ 自动检查更新 ============
+  // 启动 10 秒后异步探测 GitHub 最新 Release：不阻塞界面、网络异常一律静默。
+  function parseVer(v) {
+    return String(v || '').replace(/^v/i, '').split('.').map((x) => parseInt(x, 10) || 0);
+  }
+  function isNewerVer(remote, local) {
+    const a = parseVer(remote), b = parseVer(local);
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = a[i] || 0, y = b[i] || 0;
+      if (x > y) return true;
+      if (x < y) return false;
+    }
+    return false;
+  }
+
+  function showUpdateBar(tag, url) {
+    const bar = $('update-bar');
+    if (!bar) return;
+    $('update-text').textContent = `发现新版本 v${tag}`;
+    bar.classList.remove('hidden');
+    $('update-go').onclick = () => {
+      bar.classList.add('hidden');
+      mdAPI.openExternal(url).catch(() => {});
+    };
+    $('update-ignore').onclick = () => {
+      try { localStorage.setItem('md-skip-update', tag); } catch (_) {}
+      bar.classList.add('hidden');
+    };
+    $('update-close').onclick = () => bar.classList.add('hidden');
+  }
+
+  async function checkUpdate() {
+    if (!state.version) return;
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8000);
+      const res = await fetch('https://api.github.com/repos/hanwu-git/md-editor/releases/latest', {
+        signal: ctl.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/vnd.github+json' }
+      });
+      clearTimeout(timer);
+      if (!res.ok) return;
+      const rel = await res.json();
+      const tag = String((rel && rel.tag_name) || '').replace(/^v/i, '');
+      if (!tag || !isNewerVer(tag, state.version)) return;
+      try { if (localStorage.getItem('md-skip-update') === tag) return; } catch (_) {}
+      showUpdateBar(tag, rel.html_url || 'https://github.com/hanwu-git/md-editor/releases/latest');
+    } catch (_) {
+      // 无网络 / 超时 / DNS 失败：静默忽略，不打扰用户
+    }
   }
 
   // ============ 分隔条拖拽 ============
