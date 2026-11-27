@@ -32,8 +32,22 @@ if (-not $token) { throw 'no token obtained from git credential fill' }
 $auth = @{ Authorization = "Bearer $token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
 $api = "https://api.github.com/repos/$owner/$repo"
 
-# release notes = latest commit message (UTF-8 safe)
-$body = (git log -1 --pretty=%B) -join "`n"
+# release notes = latest commit message (UTF-8 safe) + 固定的自动更新说明
+$commitBody = (git log -1 --pretty=%B) -join "`n"
+$autoUpdateNotes = @"
+
+---
+
+### 自动更新说明
+
+- 程序启动约 10 秒后，会在后台静默检查 GitHub 上是否有新版本；检查在空闲时进行，不增加启动时间。
+- 网络不通、超时或检查失败时不会弹出任何错误提示，正常使用不受影响。
+- 检测到新版本时，窗口底部会出现提示条：可选择「去下载」「忽略此版本」或关闭。
+- 选择「忽略此版本」后，之后相同版本号的提示不再出现；若发布了更高版本，仍会正常提示。
+- 点击「去下载」会用系统默认浏览器打开对应版本的下载页面。
+- 也可随时手动访问下载页：https://github.com/hanwu-git/md-editor/releases/latest
+"@
+$body = $commitBody + $autoUpdateNotes
 $payload = @{
   tag_name         = $tag
   target_commitish = 'main'
